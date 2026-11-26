@@ -91,13 +91,13 @@ Images are served by `/api/bouquets/{id}/photos/{photo}` and `/api/gallery/{phot
 
 ## How the gestures work
 
-Gesture recognition is deliberately limited to four reliable movements (`lib/hands/tracker.ts`):
+Gesture recognition is deliberately limited to four reliable movements: open hand, fist, twist and a two-hand stretch (`lib/hands/tracker.ts`):
 
 | gesture    | detection                                                                                                                       | used for                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| **Point**  | the thumb/index midpoint blended with the index knuckle, smoothed with a One Euro filter. The pinch aims with where your hand was about 140 ms earlier, and grabs the nearest flower within reach. | moving the cursor; hovering over a button for 0.8 s selects it |
-| **Pinch**  | thumb-to-index distance (3D) ÷ palm size. It starts on one clear frame or two close ones, and lets go only after three open frames, so held flowers don't slip                          | picking up the next flower or a placed one; releasing to drop it; instant click on buttons |
-| **Twist**  | wrist → middle-knuckle angle, relative to the angle when the pinch started                                                     | rotating the flower you're holding                           |
+| **Open hand** | the centre of the palm, smoothed with a One Euro filter. It barely moves when the hand closes, so grabs land where you aim. A grab also aims with where the hand was about 140 ms earlier and takes the nearest flower within reach. | moving the cursor; hovering over a button for 0.8 s selects it |
+| **Fist**   | each finger's tip-to-wrist ÷ knuckle-to-wrist distance (about 2 when straight, about 1 when curled). A grab needs all four fingers folded for two frames, so an L or a point never counts. Letting go needs a clearly open hand for two frames, so held flowers don't slip | picking up the next flower or a placed one; opening the hand drops it; a fist over a button clicks it |
+| **Twist**  | wrist → middle-knuckle angle, relative to the angle when the fist closed                                                     | rotating the flower you're holding                           |
 | **Stretch** | both hands in an "L" (thumb and index out, other fingers folded) for a few frames                                  | pulling the hands apart adds petals and pushing them together removes them, on the selected flower or the next one |
 
 Some details that keep it calm:

@@ -3,21 +3,21 @@ import { INK } from "@/lib/flowers";
 const s = { fill: "none", stroke: INK, strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
 /** Tiny hand-drawn diagrams for the four gestures. */
-export function GestureIcon({ name }: { name: "point" | "pinch" | "twist" | "stretch" }) {
+export function GestureIcon({ name }: { name: "palm" | "fist" | "twist" | "stretch" }) {
   return (
     <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden>
-      {name === "point" && (
+      {name === "palm" && (
         <>
-          <path {...s} d="M24 54 C21 46 18 40 19 34 C20 30 24 31 25 34 L26 37 L26 16 C26 12 31 12 31 16 L31 31 M31 28 C31 24 36 24 36 28 L36 32 M36 30 C36 26 41 26 41 30 L41 34 M41 32 C41 29 46 29 46 33 C46 42 44 48 40 54" />
-          <path {...s} d="M28.5 6 C24 6 22 9 22 9 M34 7 C36 8 37 10 37 10" opacity="0.6" />
-          <circle cx="28.5" cy="5" r="2" fill="#f6dc8f" stroke={INK} strokeWidth="1.2" />
+          <path {...s} d="M22 56 C17 49 15 43 16 37 L12 26 C11 22 16 21 18 24 L22 33 L21 13 C21 9 26 9 26 13 L27 30 L29 9 C29 5 34 5 34 9 L33 30 L37 12 C38 8 43 9 42 13 L39 33 L44 22 C46 18 51 20 49 24 L43 41 C41 47 40 52 40 56" />
+          <circle cx="31" cy="40" r="3" fill="#f6dc8f" stroke={INK} strokeWidth="1.2" />
         </>
       )}
-      {name === "pinch" && (
+      {name === "fist" && (
         <>
-          <path {...s} d="M22 54 C18 46 16 40 18 33 C20 26 26 22 30 20 L38 14 C41 12 44 15 42 18 L36 25 M42 18 C45 17 47 20 45 23 L38 30 M20 34 C22 30 28 29 31 31 C34 33 34 36 32 37" />
-          <path {...s} d="M38 30 C44 34 46 42 42 54" />
-          <circle cx="33" cy="36" r="3.4" fill="#f7cdc7" stroke={INK} strokeWidth="1.2" />
+          <path {...s} d="M20 56 C17 50 16 44 17 38 C18 31 20 26 24 24 C27 21 31 21 34 22 C37 20 41 21 43 24 C46 24 48 27 48 31 C48 37 46 43 43 47 C41 51 40 54 40 56" />
+          <path {...s} d="M24 24 C24 28 25 31 28 32 M34 22 C33 26 34 30 37 31 M43 24 C42 28 42 31 44 33 M17 38 C21 36 26 37 29 40 C31 42 30 45 27 46" />
+          <circle cx="32" cy="13" r="4.5" fill="#f7cdc7" stroke={INK} strokeWidth="1.2" />
+          <path {...s} d="M32 18 L32 21" opacity="0.6" />
         </>
       )}
       {name === "twist" && (

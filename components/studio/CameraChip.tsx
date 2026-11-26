@@ -2,15 +2,15 @@
 
 import { RefObject } from "react";
 
-export type HandStatus = "off" | "loading" | "searching" | "pointing" | "pinching" | "holding" | "twohands" | "stretching";
+export type HandStatus = "off" | "loading" | "searching" | "pointing" | "gripping" | "holding" | "twohands" | "stretching";
 
 const COPY: Record<HandStatus, string> = {
   off: "Camera off",
   loading: "Waking up the camera…",
   searching: "Show one hand to the camera",
-  pointing: "Pointing",
-  pinching: "Pinching",
-  holding: "Holding · twist to turn",
+  pointing: "Open hand · moving",
+  gripping: "Fist closed",
+  holding: "Holding · twist to turn, open to drop",
   twohands: "Make an L with both hands to stretch petals",
   stretching: "Apart for more petals · closer for fewer",
 };

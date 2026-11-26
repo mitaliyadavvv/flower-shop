@@ -1,7 +1,8 @@
 /**
  * Webcam hand tracking with MediaPipe's HandLandmarker. Reports up to two
  * hands per frame, each reduced to a few stable signals; the studio turns
- * them into gestures (point, pinch, twist, and the two-hand "L" stretch).
+ * them into gestures (open palm to point, closed fist to grab, twist, and
+ * the two-hand "L" stretch).
  */
 import type { HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
@@ -17,8 +18,14 @@ export interface HandData {
    *  fingers curl (so closing a fist doesn't read as moving the hand). Mirrored, 0…1. */
   lx: number;
   ly: number;
-  /** Thumb–index distance divided by palm size. Small = pinching. */
-  pinchRatio: number;
+  /**
+   * How far each of the four fingers reaches from the wrist, relative to its
+   * knuckle (≈2 when straight, ≈1 when curled into the palm).
+   * `fistMax` is the least-curled finger: low only when all four are folded.
+   * `openAvg` is the average: high when the hand is open.
+   */
+  fistMax: number;
+  openAvg: number;
   /** Radians. Increases when the hand twists clockwise (from the user's view). */
   roll: number;
   /** Thumb and index out, other fingers folded — an "L". */
@@ -118,25 +125,29 @@ export class HandTracker {
 
 function describe(lm: NormalizedLandmark[], aspect: number): HandData {
   const d2 = (a: number, b: number) => Math.hypot((lm[a].x - lm[b].x) * aspect, lm[a].y - lm[b].y);
-  const d3 = (a: number, b: number) =>
-    Math.hypot((lm[a].x - lm[b].x) * aspect, lm[a].y - lm[b].y, (lm[a].z - lm[b].z) * aspect);
 
   // Palm size from two directions, so it holds up when the hand turns sideways.
   const palm = Math.max(d2(0, 9), d2(5, 17) * 1.35, 0.04);
-  const pinchRatio = d3(4, 8) / palm;
+  // Open palm vs closed fist, per finger: fingertip-to-wrist ÷ knuckle-to-wrist.
+  const reach = [
+    [8, 5],
+    [12, 9],
+    [16, 13],
+    [20, 17],
+  ].map(([tip, mcp]) => d2(0, tip) / Math.max(d2(0, mcp), 1e-4));
+  const fistMax = Math.max(...reach);
+  const openAvg = reach.reduce((a, b) => a + b, 0) / reach.length;
 
-  // Pointer: thumb/index midpoint blended with the index knuckle, which barely
-  // jitters. The midpoint also stays put when you close a pinch.
-  const midX = (lm[4].x + lm[8].x) / 2;
-  const midY = (lm[4].y + lm[8].y) / 2;
-  const px = 1 - (midX * 0.65 + lm[5].x * 0.35);
-  const py = midY * 0.65 + lm[5].y * 0.35;
+  // Pointer: the middle of the palm. It barely moves when the hand closes into a
+  // fist, so a grab lands exactly where you were aiming.
+  const px = 1 - (lm[0].x + lm[5].x + lm[9].x + lm[17].x) / 4;
+  const py = (lm[0].y + lm[5].y + lm[9].y + lm[17].y) / 4;
 
   const wx = (1 - lm[0].x) * aspect;
   const kx = (1 - lm[9].x) * aspect;
   const roll = Math.atan2(kx - wx, -(lm[9].y - lm[0].y));
 
-  return { px, py, lx: 1 - lm[5].x, ly: lm[5].y, pinchRatio, roll, isL: isLShape(lm, d2, palm), landmarks: lm };
+  return { px, py, lx: 1 - lm[5].x, ly: lm[5].y, fistMax, openAvg, roll, isL: isLShape(lm, d2, palm), landmarks: lm };
 }
 
 function isLShape(lm: NormalizedLandmark[], d2: (a: number, b: number) => number, palm: number) {

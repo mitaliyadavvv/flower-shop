@@ -1060,7 +1060,7 @@ em {
   background: var(--sage);
 }
 
-.cam[data-status="pinching"] .cam-dot,
+.cam[data-status="gripping"] .cam-dot,
 .cam[data-status="holding"] .cam-dot,
 .cam[data-status="stretching"] .cam-dot {
   background: var(--rose);
@@ -1126,12 +1126,12 @@ em {
   opacity: calc(var(--dwell, 0) * 4);
 }
 
-.hand-cursor[data-state="pinch"] .hc-ring,
+.hand-cursor[data-state="grab"] .hc-ring,
 .hand-cursor[data-state="hold"] .hc-ring {
   transform: scale(0.62);
 }
 
-.hand-cursor[data-state="pinch"] .hc-dot,
+.hand-cursor[data-state="grab"] .hc-dot,
 .hand-cursor[data-state="hold"] .hc-dot {
   transform: scale(1.5);
   fill: var(--butter);

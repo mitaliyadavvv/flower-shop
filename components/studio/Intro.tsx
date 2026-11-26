@@ -6,9 +6,9 @@ import { Wordmark } from "@/components/Wordmark";
 import { GestureIcon } from "./GestureIcons";
 
 const GESTURES = [
-  { name: "point", title: "Point", text: "Your hand moves a little cursor. Hover over a colour or button to choose it." },
-  { name: "pinch", title: "Pinch", text: "Bring thumb and finger together to pick up a flower. Let go to place it." },
-  { name: "twist", title: "Twist", text: "While holding a flower, turn your wrist to turn the bloom." },
+  { name: "palm", title: "Open hand", text: "Hold up an open hand to move the little cursor. Hover over a colour or button to choose it." },
+  { name: "fist", title: "Make a fist", text: "Close your hand to pick up a flower. Open it again to let go." },
+  { name: "twist", title: "Twist", text: "While your fist is closed, turn your wrist to turn the bloom." },
   { name: "stretch", title: "Stretch", text: "Make an L with both hands. Pull apart for more petals, closer for fewer, then hold still to set it." },
 ] as const;
 

@@ -360,9 +360,9 @@ export function Studio() {
     y: 0,
     trail: [] as { t: number; x: number; y: number }[],
     primary: null as null | { px: number; py: number },
-    pinching: false,
+    gripping: false,
+    prevClosed: false,
     releaseFrames: 0,
-    prevRatio: 1,
     lostAt: 0,
     roll: 0,
     rollInit: false,
@@ -408,7 +408,7 @@ export function Studio() {
     Math.min(1, Math.max(0, (ny - 0.1) / 0.68)) * window.innerHeight,
   ];
 
-  /** The nearest flower head to a screen point, generous enough to forgive a slightly-off pinch. */
+  /** The nearest flower head to a screen point, generous enough to forgive a slightly-off grab. */
   const flowerNear = (cx: number, cy: number): string | null => {
     if (!within(stageRef.current, cx, cy, 24)) return null;
     const [sx, sy] = toSvg(cx, cy);
@@ -447,7 +447,7 @@ export function Studio() {
         h.trail = [];
         h.primary = null;
         h.rollInit = false;
-        h.pinching = false;
+        h.gripping = false;
         clearDwell();
         setStatus("searching");
       }
@@ -491,25 +491,27 @@ export function Studio() {
       h.rollInit = true;
     } else h.roll += angleDelta(p.roll, h.roll) * 0.4;
 
-    // Pinch: quick to catch (one clear frame or two near ones), slow to let go
-    // (three open frames), so flowers don't slip out of your fingers mid-drag.
-    const r = p.pinchRatio;
-    const was = h.pinching;
-    if (!h.pinching) {
-      if (r < 0.28 || (r < 0.4 && h.prevRatio < 0.4)) {
-        h.pinching = true;
+    // Closed fist grabs, open palm lets go. A fist needs all four fingers
+    // folded (so an "L" or a point never counts) for two frames in a row; letting
+    // go needs a clearly open hand for two frames, so flowers don't slip mid-drag.
+    const closed = p.fistMax < 1.38;
+    const open = p.openAvg > 1.5;
+    const was = h.gripping;
+    if (!h.gripping) {
+      if (closed && h.prevClosed) {
+        h.gripping = true;
         h.releaseFrames = 0;
       }
     } else {
-      h.releaseFrames = r > 0.55 ? h.releaseFrames + 1 : 0;
-      if (h.releaseFrames >= 3) h.pinching = false;
+      h.releaseFrames = open ? h.releaseFrames + 1 : 0;
+      if (h.releaseFrames >= 2) h.gripping = false;
     }
-    h.prevRatio = r;
-    const pinchStart = h.pinching && !was;
-    const pinchEnd = !h.pinching && was;
+    h.prevClosed = closed;
+    const grabStart = h.gripping && !was;
+    const grabEnd = !h.gripping && was;
 
-    if (pinchStart) {
-      // Fingers drift a little while closing — aim with where the hand was just before.
+    if (grabStart) {
+      // The hand shifts a little while closing — aim with where it was just before.
       const before = h.trail.find((s) => time - s.t <= 140) ?? { x: h.x, y: h.y };
       const ax = before.x;
       const ay = before.y;
@@ -528,14 +530,14 @@ export function Studio() {
     }
 
     if (held.current?.source === "hand") {
-      if (pinchEnd) release(h.x, h.y);
+      if (grabEnd) release(h.x, h.y);
       else moveHeld(h.x, h.y, h.roll);
     }
 
     // Hover-to-choose for buttons and swatches.
     const holding = !!held.current;
-    const dwellEl = holding || h.pinching ? null : ((document.elementFromPoint(h.x, h.y)?.closest("[data-dwell]") as HTMLElement | null) ?? null);
-    if (!holding && !h.pinching) {
+    const dwellEl = holding || h.gripping ? null : ((document.elementFromPoint(h.x, h.y)?.closest("[data-dwell]") as HTMLElement | null) ?? null);
+    if (!holding && !h.gripping) {
       if (dwellEl !== h.dwellEl) {
         h.dwellEl?.classList.remove("is-hand-hover");
         h.dwellEl = dwellEl;
@@ -551,10 +553,10 @@ export function Studio() {
 
     if (cursor) {
       cursor.style.transform = `translate3d(${h.x}px, ${h.y}px, 0)`;
-      cursor.dataset.state = holding ? "hold" : h.pinching ? "pinch" : "point";
+      cursor.dataset.state = holding ? "hold" : h.gripping ? "grab" : "point";
       cursor.style.setProperty("--dwell", String(progress));
     }
-    setStatus(holding ? "holding" : h.pinching ? "pinching" : hands.length === 2 ? "twohands" : "pointing");
+    setStatus(holding ? "holding" : h.gripping ? "gripping" : hands.length === 2 ? "twohands" : "pointing");
   };
 
   /* -- the two-hand stretch -- */
@@ -804,7 +806,7 @@ export function Studio() {
           />
           {flowers.length === 0 && !heldNew && (
             <p className="stage-hint">
-              {mode === "hands" ? "Pinch a flower from the bench and carry it into the wrap." : "Drag a flower from the bench into the wrap to begin."}
+              {mode === "hands" ? "Close your hand over a flower on the bench and carry it into the wrap." : "Drag a flower from the bench into the wrap to begin."}
             </p>
           )}
           <div ref={binRef} className={`bin${liftedId ? " is-visible" : ""}${binHot ? " is-hot" : ""}`} aria-hidden>
@@ -840,7 +842,7 @@ export function Studio() {
                 <FlowerArt kind={(selected ?? draft).kind} color={(selected ?? draft).color} petals={(selected ?? draft).petals} seed={(selected ?? draft).seed} />
               </g>
             </svg>
-            <span className="bench-cap">{selected ? "Changes apply to the selected flower" : mode === "hands" ? "Pinch to pick up" : "Drag to add"}</span>
+            <span className="bench-cap">{selected ? "Changes apply to the selected flower" : mode === "hands" ? "Make a fist to pick up" : "Drag to add"}</span>
           </div>
 
           <section className="ctrl">
@@ -985,7 +987,7 @@ function drawSkeleton(canvas: HTMLCanvasElement | null, frame: HandFrame) {
       ctx.lineTo(X(b), Y(b));
     }
     ctx.stroke();
-    ctx.fillStyle = hand.pinchRatio < 0.4 ? "#e0a6a8" : "#f6dc8f";
+    ctx.fillStyle = hand.fistMax < 1.38 ? "#e0a6a8" : "#f6dc8f";
     for (const i of [4, 8]) {
       ctx.beginPath();
       ctx.arc(X(i), Y(i), 4, 0, Math.PI * 2);
