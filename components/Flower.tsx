@@ -24,11 +24,16 @@ export const FlowerArt = memo(function FlowerArt({ kind, color, petals, seed, st
           <g className="petal-in" style={{ "--pd": `${(i % 7) * 0.4}s` } as CSSProperties}>
             <path d={p.d} fill={fill} transform="translate(1.6 -1.2)" />
             <path d={p.d} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+            {p.vein && <path d={p.vein} fill="none" stroke={INK} strokeWidth={1.1} strokeLinecap="round" opacity={0.5} />}
+            {p.freckles && <path d={p.freckles} fill="none" stroke={INK} strokeWidth={2.4} strokeLinecap="round" opacity={0.6} />}
           </g>
         </g>
       ))}
       {g.stamens.map((d, i) => (
         <path key={`s${i}`} d={d} fill="none" stroke={INK} strokeWidth={1.1} strokeLinecap="round" />
+      ))}
+      {g.anthers?.map((a, i) => (
+        <ellipse key={`a${i}`} cx={a.x} cy={a.y} rx={5.5} ry={2.6} transform={`rotate(${a.a} ${a.x} ${a.y})`} fill="#d8956a" stroke={INK} strokeWidth={1.1} />
       ))}
       {g.center && <path d={g.center} fill={g.centerFill} transform="translate(1.2 -0.8)" />}
       {g.center && <path d={g.center} fill="none" stroke={INK} strokeWidth={1.4} />}

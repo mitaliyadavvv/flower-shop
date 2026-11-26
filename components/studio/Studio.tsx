@@ -16,8 +16,8 @@ import {
   PICKER_KINDS,
   KindKey,
   MAX_FLOWERS,
-  MAX_PETALS,
-  MIN_PETALS,
+  clampPetals,
+  petalRange,
   Note,
   clampPos,
   newId,
@@ -179,7 +179,7 @@ export function Studio() {
   const setColor = (color: ColorKey) => editTarget({ color });
   const target: Draft | Flower = flowers.find((f) => f.id === selectedId) ?? draft;
   const nudgePetals = (d: number) =>
-    editTarget({ petals: Math.max(MIN_PETALS, Math.min(MAX_PETALS, target.petals + d)) });
+    editTarget({ petals: clampPetals(target.kind, target.petals + d) });
   const rotateSelected = (deg: number) => {
     const sel = selectedRef.current;
     if (sel) setFlowers((fs) => fs.map((f) => (f.id === sel ? { ...f, rotation: f.rotation + deg } : f)));
@@ -395,6 +395,8 @@ export function Studio() {
     }
   };
 
+  const kindOf = (key: string): KindKey =>
+    key === "draft" ? draftRef.current.kind : flowersRef.current.find((f) => f.id === key)?.kind ?? "daisy";
   const petalsOf = (key: string) =>
     key === "draft" ? draftRef.current.petals : flowersRef.current.find((f) => f.id === key)?.petals ?? 5;
   const setPetalsOf = (key: string, n: number) => {
@@ -599,7 +601,7 @@ export function Studio() {
     // Dead zone: move most of a step past the current number before it changes,
     // so it never flickers between two values.
     if (Math.abs(wanted - s.n) > 0.8) {
-      const n = Math.max(MIN_PETALS, Math.min(MAX_PETALS, Math.round(wanted)));
+      const n = clampPetals(kindOf(s.key), wanted);
       if (n !== s.n) {
         s.n = n;
         s.lastChange = time;
@@ -888,11 +890,11 @@ export function Studio() {
           <section className="ctrl">
             <h3 className="label">Petals</h3>
             <div className="petals">
-              <button className="round-btn" data-dwell onClick={() => nudgePetals(-1)} disabled={target.petals <= MIN_PETALS} aria-label="Fewer petals">
+              <button className="round-btn" data-dwell onClick={() => nudgePetals(-1)} disabled={target.petals <= petalRange(target.kind)[0]} aria-label="Fewer petals">
                 −
               </button>
               <span className="petals-n" aria-live="polite">{target.petals}</span>
-              <button className="round-btn" data-dwell onClick={() => nudgePetals(1)} disabled={target.petals >= MAX_PETALS} aria-label="More petals">
+              <button className="round-btn" data-dwell onClick={() => nudgePetals(1)} disabled={target.petals >= petalRange(target.kind)[1]} aria-label="More petals">
                 +
               </button>
             </div>

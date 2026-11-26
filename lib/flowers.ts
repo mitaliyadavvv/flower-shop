@@ -48,9 +48,10 @@ const CENTER_FOR: Record<ColorKey, string> = {
 export const KINDS = {
   daisy: { name: "Daisy", length: 1.0, width: 0.36, center: 0.27, petals: 10 },
   blossom: { name: "Blossom", length: 0.86, width: 1.0, center: 0.22, petals: 5 },
-  tulip: { name: "Tulip", length: 1.14, width: 0.66, center: 0, petals: 3 },
+  lily: { name: "Lily", length: 1.12, width: 0.46, center: 0.12, petals: 6 },
   cherry: { name: "Cherry", length: 0.84, width: 1.05, center: 0.15, petals: 5 },
   // No longer offered in the studio, but kept so bouquets already sent still draw.
+  tulip: { name: "Tulip", length: 1.14, width: 0.66, center: 0, petals: 3 },
   aster: { name: "Aster", length: 1.02, width: 0.4, center: 0.2, petals: 8 },
 } as const;
 
@@ -58,10 +59,17 @@ export type KindKey = keyof typeof KINDS;
 /** Every kind that can be drawn (including retired ones). */
 export const KIND_KEYS = Object.keys(KINDS) as KindKey[];
 /** The kinds offered in the studio. */
-export const PICKER_KINDS: KindKey[] = ["daisy", "blossom", "tulip", "cherry"];
+export const PICKER_KINDS: KindKey[] = ["daisy", "blossom", "lily", "cherry"];
 
 export const MIN_PETALS = 3;
 export const MAX_PETALS = 12;
+
+/** Petal range per kind — lilies have at most six. */
+export const petalRange = (kind: KindKey): [number, number] => (kind === "lily" ? [3, 6] : [MIN_PETALS, MAX_PETALS]);
+export const clampPetals = (kind: KindKey, n: number) => {
+  const [lo, hi] = petalRange(kind);
+  return Math.max(lo, Math.min(hi, Math.round(n)));
+};
 export const MAX_FLOWERS = 24;
 
 /** Head radius in bouquet units (the bouquet canvas is 600 × 800). */
@@ -128,6 +136,9 @@ function halfWidth(kind: KindKey, t: number): number {
       return (t < 0.42 ? Math.sin((Math.PI * t) / 0.84) : (1 - t) / 0.58) * 0.5;
     case "cherry":
       return Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.8 + 0.1)), 0.6) * 0.5;
+    case "lily":
+      // Narrow at the base, fullest a third of the way out, then a long pointed tip.
+      return Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 1.2) * 0.5;
     case "tulip":
       // Rounded at the bottom, fullest a third of the way up, tapering to a point.
       return Math.pow(Math.sin(Math.PI * (0.22 + 0.78 * t)), 0.8) * 0.5;
@@ -140,8 +151,8 @@ export function petalPath(kind: KindKey, length: number, width: number, r: Rng):
   const left: Pt[] = [];
   const right: Pt[] = [];
   // Tulips want smooth, confident sides; the rest can wobble a little more.
-  const wx = kind === "tulip" ? 0.025 : 0.07;
-  const wy = kind === "tulip" ? 0.01 : 0.025;
+  const wx = kind === "tulip" || kind === "lily" ? 0.03 : 0.07;
+  const wy = kind === "tulip" || kind === "lily" ? 0.012 : 0.025;
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const w = halfWidth(kind, t) * width;
@@ -156,7 +167,7 @@ export function petalPath(kind: KindKey, length: number, width: number, r: Rng):
       [wiggle(r, 1), -length * 0.86],
       [width * 0.2, -length * 0.98],
     ];
-  } else if (kind === "aster" || kind === "tulip") {
+  } else if (kind === "aster" || kind === "tulip" || kind === "lily") {
     tip = [[wiggle(r, 1), -length * 1.03]];
   } else {
     tip = [[wiggle(r, width * 0.08), -length * (1 + wiggle(r, 0.03))]];
@@ -168,17 +179,21 @@ export function petalPath(kind: KindKey, length: number, width: number, r: Rng):
 
 export interface HeadGeometry {
   radius: number;
-  /** `oy` (when set) moves the petal's base below the centre — tulips fan up from a base. */
-  petals: { d: string; angle: number; oy?: number }[];
+  /** `oy` (when set) moves the petal's base below the centre — tulips fan up from a base.
+   *  `vein` is a midrib + freckles drawn inside the petal (lilies). */
+  petals: { d: string; angle: number; oy?: number; vein?: string; freckles?: string }[];
   center: string;
   centerFill: string;
   dots: { x: number; y: number; r: number }[];
   stamens: string[];
+  /** Pollen tips on the ends of long stamens (lilies). */
+  anthers?: { x: number; y: number; a: number }[];
 }
 
 /** Build the shapes for one flower head. Petal shapes are stable per index. */
 export function headGeometry(kind: KindKey, petals: number, seed: number, color: ColorKey): HeadGeometry {
   if (kind === "tulip") return tulipGeometry(petals, seed, color);
+  if (kind === "lily") return lilyGeometry(petals, seed, color);
   const spec = KINDS[kind];
   const r = mulberry32(seed);
   const radius = HEAD;
@@ -222,6 +237,60 @@ export function headGeometry(kind: KindKey, petals: number, seed: number, color:
     centerFill: CENTER_FOR[color],
     dots,
     stamens,
+  };
+}
+
+/**
+ * Lily: long pointed star petals (3–6), alternating slightly wider and narrower,
+ * each with a midrib and a few freckles, and long stamens tipped with pollen.
+ */
+function lilyGeometry(petals: number, seed: number, color: ColorKey): HeadGeometry {
+  const n = clampPetals("lily", petals);
+  const spec = KINDS.lily;
+  const r = mulberry32(seed);
+  const radius = HEAD;
+  const offset = r() * 360;
+  const list: HeadGeometry["petals"] = [];
+  for (let i = 0; i < n; i++) {
+    const pr = mulberry32(seed * 31 + i * 7919);
+    const inner = i % 2 === 0;
+    const len = radius * spec.length * (inner ? 1 : 0.94) * between(pr, 0.96, 1.04);
+    const wid = radius * spec.width * (inner ? 1.1 : 0.88) * (n <= 4 ? 1.25 : 1) * between(pr, 0.95, 1.05);
+    // Midrib, slightly curved, plus freckles near the base.
+    const vein = openPath([[0, -len * 0.12], [wiggle(pr, 1.2), -len * 0.45], [wiggle(pr, 1), -len * 0.78]]);
+    let freckles = "";
+    const count = 3 + Math.floor(pr() * 3);
+    for (let k = 0; k < count; k++) {
+      const fy = -len * between(pr, 0.18, 0.42);
+      const fx = (pr() > 0.5 ? 1 : -1) * wid * between(pr, 0.08, 0.2);
+      freckles += `M${r2(fx)} ${r2(fy)} l0.1 0 `;
+    }
+    list.push({ d: petalPath("lily", len, wid, pr), angle: r2(offset + (i * 360) / n + wiggle(pr, 3)), vein, freckles });
+  }
+  const cr = mulberry32(seed + 101);
+  const stamens: string[] = [];
+  const anthers: NonNullable<HeadGeometry["anthers"]> = [];
+  for (let i = 0; i < 6; i++) {
+    const a = ((offset + 30 + i * 60) * Math.PI) / 180 + wiggle(cr, 0.15);
+    const L = radius * between(cr, 0.55, 0.7);
+    const bend = wiggle(cr, 0.12);
+    const ex = Math.cos(a) * L;
+    const ey = Math.sin(a) * L;
+    stamens.push(openPath([
+      [Math.cos(a) * radius * 0.05, Math.sin(a) * radius * 0.05],
+      [Math.cos(a + bend) * L * 0.55, Math.sin(a + bend) * L * 0.55],
+      [ex, ey],
+    ]));
+    anthers.push({ x: r2(ex), y: r2(ey), a: r2((a * 180) / Math.PI) });
+  }
+  return {
+    radius,
+    petals: list,
+    center: blob(0, 0, radius * spec.center, cr, 0.12, 7),
+    centerFill: "#d3e0b3",
+    dots: [],
+    stamens,
+    anthers,
   };
 }
 
@@ -336,7 +405,7 @@ export function sanitizeComposition(input: unknown): Composition | null {
       id: `f${i}`,
       kind,
       color,
-      petals: Math.round(num(o.petals, MIN_PETALS, MAX_PETALS, KINDS[kind].petals)),
+      petals: clampPetals(kind, num(o.petals, MIN_PETALS, MAX_PETALS, KINDS[kind].petals)),
       x: Math.round(x * 10) / 10,
       y: Math.round(y * 10) / 10,
       rotation: Math.round(num(o.rotation, -3600, 3600, 0) % 360),
