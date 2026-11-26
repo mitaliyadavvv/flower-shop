@@ -18,10 +18,10 @@ const sans = Instrument_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
-  title: "posy — flowers, made by you",
+  title: "phoolish — flowers, made by you",
   description: "Arrange a little hand-drawn bouquet with your hands, write a note, and send it to someone special.",
   openGraph: {
-    title: "posy — flowers, made by you",
+    title: "phoolish — flowers, made by you",
     description: "Arrange a little hand-drawn bouquet, write a note, and send it to someone special.",
     type: "website",
   },

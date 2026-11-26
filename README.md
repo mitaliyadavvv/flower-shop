@@ -1,4 +1,4 @@
-# posy — flowers, made by you
+# phoolish — flowers, made by you
 
 A tiny flower studio on the internet. Arrange a hand-drawn bouquet with hand gestures (or a mouse/finger), write a little note, and send it as a link. The recipient gets a small, unhurried reveal: an envelope moment, the bouquet blooming stem by stem, then the card.
 
@@ -29,7 +29,7 @@ Bouquets are stored in **Cloud Firestore** in the Firebase project `posy-17da6`.
 
 1. Open the [Firebase console](https://console.firebase.google.com/) and select **posy-17da6**. Then go to **Build → Firestore Database → Rules**.
 2. Add the rules from [`firebase/firestore.rules`](firebase/firestore.rules):
-   - This project is only for posy, so replace everything in the editor with the whole file.
+   - This project is only for phoolish, so replace everything in the editor with the whole file.
 3. Click **Publish**.
 4. Check it: open `https://<your-site>/api/health`. `"reads": "allowed"` means you're done.
 

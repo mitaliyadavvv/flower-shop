@@ -1,4 +1,4 @@
-// posy — Firestore rules. This project is only for posy, so publish this
+// phoolish — Firestore rules. This project is only for phoolish, so publish this
 // whole file in Firebase console → Firestore Database → Rules.
 
 rules_version = '2';

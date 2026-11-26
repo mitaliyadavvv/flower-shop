@@ -80,8 +80,8 @@ export async function composePolaroid(photo: HTMLCanvasElement, caption = "a bou
   ctx.textAlign = "right";
   ctx.fillStyle = INK;
   ctx.font = `italic 400 40px ${serif}`;
-  ctx.fillText("posy", CARD_W - PAD - 8, base + 74);
-  const w = ctx.measureText("posy").width;
+  ctx.fillText("phoolish", CARD_W - PAD - 8, base + 74);
+  const w = ctx.measureText("phoolish").width;
   tinyFlower(ctx, CARD_W - PAD - 8 - w - 24, base + 62, 13);
 
   let quality = 0.86;

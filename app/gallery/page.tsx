@@ -6,7 +6,7 @@ import { listGallery } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Gallery — posy",
+  title: "Gallery — phoolish",
   description: "Little moments people shared with the flowers they were sent.",
 };
 
@@ -15,7 +15,7 @@ export default async function GalleryPage() {
   return (
     <div className="gallery">
       <header className="page-top">
-        <Link href="/" aria-label="posy home">
+        <Link href="/" aria-label="phoolish home">
           <Wordmark />
         </Link>
         <Link href="/studio" className="page-top-link">Make a bouquet</Link>
@@ -32,7 +32,7 @@ export default async function GalleryPage() {
             {photos.map((p, i) => (
               <li key={p.id} style={{ transform: `rotate(${((i * 37) % 7) - 3}deg)` }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/gallery/${p.id}`} alt="A photo shared with a posy bouquet" loading="lazy" width={1080} height={1350} />
+                <img src={`/api/gallery/${p.id}`} alt="A photo shared with a phoolish bouquet" loading="lazy" width={1080} height={1350} />
               </li>
             ))}
           </ul>

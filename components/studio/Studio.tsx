@@ -757,7 +757,7 @@ export function Studio() {
   return (
     <div className={`studio mode-${mode}${heldNew || liftedId ? " is-holding" : ""}`}>
       <header className="studio-top">
-        <Link href="/" className="studio-home" aria-label="posy home">
+        <Link href="/" className="studio-home" aria-label="phoolish home">
           <Wordmark />
         </Link>
         <ol className="steps" aria-label="Progress">

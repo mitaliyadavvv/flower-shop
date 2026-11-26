@@ -24,7 +24,7 @@ export function Intro({ onBegin }: { onBegin: (mode: "hands" | "touch") => void 
   return (
     <div className="intro">
       <header className="page-top">
-        <Link href="/" aria-label="posy home">
+        <Link href="/" aria-label="phoolish home">
           <Wordmark />
         </Link>
       </header>
@@ -34,7 +34,7 @@ export function Intro({ onBegin }: { onBegin: (mode: "hands" | "touch") => void 
           Make it with <em>your hands.</em>
         </h1>
         <p className="intro-lede">
-          posy can use your camera to follow one hand, so you can pick flowers up and arrange them in the air. The video
+          phoolish can use your camera to follow one hand, so you can pick flowers up and arrange them in the air. The video
           stays on your device — nothing is recorded or sent anywhere.
         </p>
 

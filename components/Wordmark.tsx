@@ -1,6 +1,6 @@
 import { INK } from "@/lib/flowers";
 
-/** "posy" with a tiny hand-drawn bloom for the dot. */
+/** "phoolish" with a tiny hand-drawn bloom for the dot. */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={`wordmark${className ? ` ${className}` : ""}`}>
@@ -10,7 +10,7 @@ export function Wordmark({ className }: { className?: string }) {
         ))}
         <circle r="2.6" fill="#f6dc8f" stroke={INK} strokeWidth="1" />
       </svg>
-      posy
+      phoolish
     </span>
   );
 }

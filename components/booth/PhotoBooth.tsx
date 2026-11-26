@@ -319,13 +319,13 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
 
   useEffect(() => {
     if (!shot) return;
-    const file = new File([shot.blob], "posy-bouquet.jpg", { type: "image/jpeg" });
+    const file = new File([shot.blob], "phoolish-bouquet.jpg", { type: "image/jpeg" });
     setCanShare(typeof navigator.canShare === "function" && navigator.canShare({ files: [file] }));
   }, [shot]);
 
   const share = async () => {
     if (!shot) return;
-    const file = new File([shot.blob], "posy-bouquet.jpg", { type: "image/jpeg" });
+    const file = new File([shot.blob], "phoolish-bouquet.jpg", { type: "image/jpeg" });
     try {
       await navigator.share({ files: [file], title: "My bouquet" });
     } catch {}
@@ -470,7 +470,7 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
       ) : (
         <footer className="booth-controls booth-controls--review">
           <div className="booth-row booth-row--wrap">
-            <a className="btn btn--ghost btn--small" href={shot.url} download="posy-bouquet.jpg">
+            <a className="btn btn--ghost btn--small" href={shot.url} download="phoolish-bouquet.jpg">
               Download
             </a>
             {canShare && (
@@ -486,7 +486,7 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
             <div className="sendback">
               <label className="check">
                 <input type="checkbox" checked={toGallery} onChange={(e) => setToGallery(e.target.checked)} />
-                <span>Also show it in the public posy gallery (no names shown)</span>
+                <span>Also show it in the public phoolish gallery (no names shown)</span>
               </label>
               <button className="btn btn--primary" onClick={sendBack} disabled={sending}>
                 {sending ? "Sending…" : `Send it back to ${who}`}
