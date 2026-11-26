@@ -1843,6 +1843,21 @@ em {
   to { opacity: 0.2; transform: scale(0.92); }
 }
 
+.booth-diag {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  right: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(59, 48, 42, 0.85);
+  color: #fdf9f2;
+  font: 11.5px/1.5 ui-monospace, Menlo, monospace;
+  white-space: pre-wrap;
+  z-index: 3;
+}
+
 .booth-flash {
   position: absolute;
   inset: 0;

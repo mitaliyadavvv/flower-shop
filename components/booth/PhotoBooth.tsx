@@ -62,8 +62,14 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
   const [canShare, setCanShare] = useState(false);
   const [trackingFailed, setTrackingFailed] = useState(false);
   const [noPicture, setNoPicture] = useState(false);
+  const startError = useRef("");
+  const [diag, setDiag] = useState<string | null>(null);
 
   follow.current = followHands;
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
+  const trackingFailedRef = useRef(trackingFailed);
+  trackingFailedRef.current = trackingFailed;
   size.current = sizePct / 100;
 
   /* ---------- the bouquet as a crisp still image ---------- */
@@ -97,7 +103,8 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
       try {
         await t.start();
         if (!cancelled) setCamera("on");
-      } catch {
+      } catch (err) {
+        startError.current = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
         if (cancelled) return;
         if (video.srcObject) {
           // The camera works; only hand tracking failed. Keep the picture —
@@ -151,6 +158,30 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
     }, 4000);
     return () => window.clearTimeout(t);
   }, [camera]);
+
+  // Diagnostics, shown with ?debug in the URL: what the camera is actually doing.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("debug")) return;
+    const t = window.setInterval(() => {
+      const v = videoRef.current;
+      const stream = v?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks()[0];
+      const set = track?.getSettings?.();
+      const frame = v?.closest(".booth-frame")?.getBoundingClientRect();
+      const cs = v ? getComputedStyle(v) : null;
+      setDiag(
+        [
+          `state=${cameraRef.current} hands=${hands.current.frame?.hands.length ?? "-"} trackingFailed=${trackingFailedRef.current}`,
+          `video ready=${v?.readyState} ${v?.videoWidth}x${v?.videoHeight} paused=${v?.paused} t=${v?.currentTime.toFixed(1)}`,
+          `track=${track ? `${track.readyState} enabled=${track.enabled} muted=${track.muted} ${set?.width}x${set?.height}` : "none"}`,
+          `video css op=${cs?.opacity} disp=${cs?.display} box=${frame ? `${Math.round(frame.width)}x${Math.round(frame.height)}` : "-"}`,
+          `error=${startError.current || "none"}`,
+          `ua=${navigator.userAgent.replace(/^Mozilla\/5.0 /, "").slice(0, 90)}`,
+        ].join("\n"),
+      );
+    }, 500);
+    return () => window.clearInterval(t);
+  }, []);
 
   /* ---------- drawing ---------- */
   const handLayer = useRef<HTMLCanvasElement | null>(null);
@@ -404,6 +435,7 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
             </p>
           )}
           <div className={`booth-flash${flash ? " is-on" : ""}`} />
+          {diag && <pre className="booth-diag">{diag}</pre>}
         </div>
 
         {shot && (
