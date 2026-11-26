@@ -1,22 +1,24 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { Composition, Note, SavedBouquet, sanitizeComposition } from "./flowers";
 
 /**
- * Bouquet storage. Uses Supabase (PostgREST) when SUPABASE_URL and
- * SUPABASE_SECRET_KEY are set. In local development without them, bouquets
- * are kept as JSON files in ./.data so everything works out of the box.
+ * Bouquet storage in Cloud Firestore, through its REST API.
+ *
+ * No secret keys are involved: Firestore is called like any public client,
+ * and the security rules in firebase/firestore.rules decide what's allowed
+ * (create a well-formed bouquet, read one by id — nothing else).
  */
 
-const URL_ = process.env.SUPABASE_URL?.trim().replace(/\/$/, "");
-const KEY = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
-const LOCAL_DIR = path.join(process.cwd(), ".data", "bouquets");
+const PROJECT = process.env.FIREBASE_PROJECT_ID || "ritual-caeea";
+const DATABASE = process.env.FIRESTORE_DATABASE || "(default)";
+const COLLECTION = "bouquets";
+const API_KEY = process.env.FIREBASE_API_KEY; // optional — only for quota attribution
+
+const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/${encodeURIComponent(DATABASE)}/documents/${COLLECTION}`;
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-export const storageMode = (): "supabase" | "local" | "none" =>
-  URL_ && KEY ? "supabase" : process.env.NODE_ENV !== "production" ? "local" : "none";
+export const storageInfo = () => ({ provider: "firestore" as const, project: PROJECT, database: DATABASE, collection: COLLECTION });
 
 export function makeId(length = 10) {
   const bytes = randomBytes(length);
@@ -25,80 +27,66 @@ export function makeId(length = 10) {
   return id;
 }
 
-const headers = () => {
-  const h: Record<string, string> = { apikey: KEY!, "content-type": "application/json" };
-  // Legacy service_role keys are JWTs and also go in Authorization.
-  if (KEY!.startsWith("eyJ")) h.authorization = `Bearer ${KEY}`;
-  return h;
-};
+const withKey = (url: string) => (API_KEY ? `${url}${url.includes("?") ? "&" : "?"}key=${API_KEY}` : url);
 
-interface Row {
-  id: string;
-  composition: Composition;
-  recipient_name: string | null;
-  message: string;
-  sender_name: string | null;
-  created_at: string;
+type Fields = Record<string, { stringValue?: string; timestampValue?: string }>;
+
+export class StorageError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
 }
 
-const fromRow = (row: Row): SavedBouquet | null => {
-  const composition = sanitizeComposition(row.composition);
-  if (!composition) return null;
-  return {
-    id: row.id,
-    composition,
-    note: { to: row.recipient_name ?? "", message: row.message ?? "", from: row.sender_name ?? "" },
-    createdAt: row.created_at,
-  };
-};
-
 export async function saveBouquet(composition: Composition, note: Note): Promise<string> {
-  const mode = storageMode();
-  if (mode === "none") throw new Error("Storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.");
-  const id = makeId();
-  const row: Row = {
-    id,
-    composition,
-    recipient_name: note.to || null,
-    message: note.message,
-    sender_name: note.from || null,
-    created_at: new Date().toISOString(),
-  };
-  if (mode === "local") {
-    await fs.mkdir(LOCAL_DIR, { recursive: true });
-    await fs.writeFile(path.join(LOCAL_DIR, `${id}.json`), JSON.stringify(row, null, 2));
-    return id;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const id = makeId();
+    const fields: Fields = {
+      composition: { stringValue: JSON.stringify(composition) },
+      message: { stringValue: note.message },
+      recipient_name: { stringValue: note.to },
+      sender_name: { stringValue: note.from },
+      created_at: { timestampValue: new Date().toISOString() },
+    };
+    const res = await fetch(withKey(`${BASE}?documentId=${id}`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fields }),
+      cache: "no-store",
+    });
+    if (res.ok) return id;
+    if (res.status === 409) continue; // id already taken — astronomically rare
+    const text = await res.text();
+    throw new StorageError(`Firestore write failed (${res.status}): ${text.slice(0, 300)}`, res.status);
   }
-  const res = await fetch(`${URL_}/rest/v1/bouquets`, {
-    method: "POST",
-    headers: { ...headers(), prefer: "return=minimal" },
-    body: JSON.stringify(row),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Supabase insert failed (${res.status}): ${await res.text()}`);
-  return id;
+  throw new StorageError("Could not find a free bouquet id", 500);
 }
 
 export async function getBouquet(id: string): Promise<SavedBouquet | null> {
   if (!/^[A-Za-z0-9]{8,16}$/.test(id)) return null;
-  const mode = storageMode();
-  if (mode === "none") return null;
-  if (mode === "local") {
-    try {
-      const raw = await fs.readFile(path.join(LOCAL_DIR, `${id}.json`), "utf8");
-      return fromRow(JSON.parse(raw));
-    } catch {
-      return null;
-    }
-  }
-  const res = await fetch(
-    `${URL_}/rest/v1/bouquets?id=eq.${encodeURIComponent(id)}&select=id,composition,recipient_name,message,sender_name,created_at&limit=1`,
-    { headers: headers(), cache: "no-store" },
-  );
+  const res = await fetch(withKey(`${BASE}/${id}`), { cache: "no-store" });
+  if (res.status === 404) return null;
   if (!res.ok) {
-    console.error("Supabase read failed", res.status, await res.text());
+    console.error("Firestore read failed", res.status, (await res.text()).slice(0, 300));
     return null;
   }
-  const rows = (await res.json()) as Row[];
-  return rows[0] ? fromRow(rows[0]) : null;
+  const doc = (await res.json()) as { fields?: Fields; createTime?: string };
+  const f = doc.fields ?? {};
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(f.composition?.stringValue ?? "null");
+  } catch {
+    return null;
+  }
+  const composition = sanitizeComposition(raw);
+  if (!composition) return null;
+  return {
+    id,
+    composition,
+    note: {
+      to: f.recipient_name?.stringValue ?? "",
+      message: f.message?.stringValue ?? "",
+      from: f.sender_name?.stringValue ?? "",
+    },
+    createdAt: f.created_at?.timestampValue ?? doc.createTime ?? "",
+  };
 }

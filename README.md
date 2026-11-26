@@ -5,7 +5,7 @@ A tiny flower studio on the internet. Arrange a hand-drawn bouquet with hand ges
 - **Next.js 16 (App Router) + React 19 + TypeScript**
 - **SVG illustrations** generated from seeded, jittered Catmull-Rom curves, with a light pencil-displacement filter. Each flower stays the same everywhere it's drawn.
 - **MediaPipe HandLandmarker** (`@mediapipe/tasks-vision`) for webcam hand tracking, running entirely in the browser
-- **Supabase** (Postgres) for saved bouquets, accessed **only from the server**
+- **Cloud Firestore** for saved bouquets, protected by security rules, so no secret keys are needed
 - No sign-up, analytics or third-party UI kits
 
 ---
@@ -17,51 +17,53 @@ npm install          # also copies MediaPipe's wasm into public/mediapipe/wasm
 npm run dev          # http://localhost:3000
 ```
 
-With no Supabase variables set, development stores bouquets as JSON files in `./.data/bouquets/`, so you can try the full flow (make → send → open link) right away.
+Local development saves to the same Firestore project, so set up the rules below first.
 
 > Camera access needs a secure context. `localhost` counts. On another device on your network, use HTTPS (e.g. a Vercel preview).
 
 ---
 
-## Supabase setup
+## Firebase setup (one-time, about 2 minutes)
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and run it. This creates the `bouquets` table and enables Row Level Security with **no public policies**, so the anon key can't read or write it.
-3. Under **Project Settings → API keys**, copy:
-   - the **Project URL** → `SUPABASE_URL`
-   - a **secret key** (`sb_secret_…`), or the legacy `service_role` key → `SUPABASE_SECRET_KEY`
-4. Put them in `.env.local` (see [`.env.example`](.env.example)):
+Bouquets are stored in **Cloud Firestore** in the Firebase project `ritual-caeea`. The site calls Firestore's REST API from its own server like any public client, so **there are no secret keys and no Vercel environment variables to set**. The security rules decide what's allowed.
 
-```bash
-SUPABASE_URL=https://abcd1234.supabase.co
-SUPABASE_SECRET_KEY=sb_secret_xxx
-```
+1. Open the [Firebase console](https://console.firebase.google.com/) and select **ritual-caeea**. Then go to **Build → Firestore Database → Rules**.
+2. Add the rules from [`firebase/firestore.rules`](firebase/firestore.rules):
+   - **If the project already has rules for another app** (it does if other things use it), don't replace them. Copy only the `match /bouquets/{id} { … }` block and paste it inside your existing `match /databases/{database}/documents { … }`.
+   - If the rules editor is empty or default, paste the whole file.
+3. Click **Publish**.
+4. Check it: open `https://<your-site>/api/health`. `"reads": "allowed"` means you're done.
 
-Both variables are **server-only**: they're read in `lib/store.ts`, which imports `server-only`, and used only by the `POST /api/bouquets` route and the server-rendered `/bouquet/[id]` page. Never give them a `NEXT_PUBLIC_` prefix.
+What the rules allow:
 
-### Data model
+- Anyone with a link can **get** that one bouquet.
+- Nobody can **list** or browse bouquets.
+- New bouquets must be well-formed: a 10-character id, a message of 1–800 characters, names of 60 characters or fewer, and a bounded composition.
+- Bouquets can **never be edited or deleted** through the site.
 
-| column           | type        | notes                                                                 |
-| ---------------- | ----------- | --------------------------------------------------------------------- |
-| `id`             | text, PK    | 10-character random id (unambiguous alphabet), used in the share URL |
-| `composition`    | jsonb       | `{ version: 1, flowers: Flower[] }`                                   |
-| `recipient_name` | text?       | optional                                                              |
-| `message`        | text        | up to 800 characters                                                  |
-| `sender_name`    | text?       | optional                                                              |
-| `created_at`     | timestamptz | defaults to `now()`                                                   |
+To use a different Firebase project, set `FIREBASE_PROJECT_ID` (see [`.env.example`](.env.example)).
 
-Each `Flower` is `{ kind, color, petals, x, y, rotation, scale, seed }`. Positions use a fixed 600 × 800 bouquet coordinate space, so the composition renders identically at any screen size. The `seed` gives every petal and leaf its exact wobble. The server validates and clamps everything (`sanitizeComposition` / `sanitizeNote` in `lib/flowers.ts`) before saving.
+### Data model — collection `bouquets`, document id = share id
+
+| field            | type      | notes                                                                         |
+| ---------------- | --------- | ----------------------------------------------------------------------------- |
+| `composition`    | string    | JSON `{ version: 1, flowers: Flower[] }`                                      |
+| `message`        | string    | 1–800 characters                                                              |
+| `recipient_name` | string    | may be empty                                                                  |
+| `sender_name`    | string    | may be empty                                                                  |
+| `created_at`     | timestamp |                                                                               |
+
+Each `Flower` is `{ kind, color, petals, x, y, rotation, scale, seed }`. Positions use a fixed 600 × 800 bouquet coordinate space, so the composition renders identically at any screen size. The `seed` gives every petal and leaf its exact wobble. The server validates and clamps everything (`sanitizeComposition` / `sanitizeNote` in `lib/flowers.ts`) before saving, and again when reading.
 
 ---
 
 ## Deploying to Vercel
 
-1. Push this folder to a Git repository and import it in Vercel. Framework preset: **Next.js**; no build settings to change.
-2. In **Settings → Environment Variables**, add `SUPABASE_URL` and `SUPABASE_SECRET_KEY` (Production and Preview).
-3. Optional: set `NEXT_PUBLIC_SITE_URL` to your public domain (e.g. `https://posy.example.com`). It's used for share links and Open Graph metadata. If it isn't set, share links use the current origin.
-4. Deploy.
+1. Import the GitHub repository in Vercel. Framework preset: **Next.js**; no build settings or environment variables needed.
+2. In **Settings → Deployment Protection**, turn off **Vercel Authentication**. Otherwise recipients hit a Vercel login page.
+3. Optional: set `NEXT_PUBLIC_SITE_URL` to your public address so share links always use it.
 
-In production without Supabase variables, the API returns a clear "storage is not configured" error rather than failing silently, because Vercel's filesystem is read-only.
+Every push to `main` redeploys automatically.
 
 ---
 
@@ -96,6 +98,7 @@ app/
   studio/page.tsx          the maker (intro → arrange → write → send)
   bouquet/[id]/page.tsx    recipient reveal (server-fetched)
   api/bouquets/route.ts    POST: validate + save, returns { id }
+  api/health/route.ts      setup check: can this deployment read bouquets?
   globals.css              the whole visual system
 components/
   Flower.tsx               FlowerArt (a single illustrated head) + positioned, swaying head
@@ -106,8 +109,8 @@ lib/
   flowers.ts               model, palette, drawing recipes, validation
   paths.ts / rng.ts        hand-drawn geometry helpers, seeded RNG
   hands/                   MediaPipe tracker + One Euro filter
-  store.ts                 Supabase (or local dev) storage, server-only
-supabase/schema.sql
+  store.ts                 Firestore storage (REST), server-only
+firebase/firestore.rules
 ```
 
 The hand-tracking model (`hand_landmarker.task`, about 7.8 MB) is loaded from Google's MediaPipe model storage the first time someone turns on the camera. To self-host it, download it into `public/mediapipe/` and change `MODEL_URL` in `lib/hands/tracker.ts`.

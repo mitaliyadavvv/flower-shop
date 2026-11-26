@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sanitizeComposition, sanitizeNote } from "@/lib/flowers";
-import { saveBouquet, storageMode } from "@/lib/store";
+import { StorageError, saveBouquet } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -20,14 +20,19 @@ export async function POST(req: Request) {
   const note = sanitizeNote(n);
   if (!note) return NextResponse.json({ error: "Write a few words first — even a short one is lovely." }, { status: 400 });
 
-  if (storageMode() === "none") {
-    return NextResponse.json({ error: "The flower shop isn't set up yet (storage is not configured)." }, { status: 503 });
-  }
   try {
     const id = await saveBouquet(composition, note);
     return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "We couldn't wrap your flowers just now. Please try again." }, { status: 500 });
+    const notSetUp = err instanceof StorageError && err.status === 403;
+    return NextResponse.json(
+      {
+        error: notSetUp
+          ? "The flower shop isn't set up yet (Firestore rules don't allow saving bouquets)."
+          : "We couldn't wrap your flowers just now. Please try again.",
+      },
+      { status: notSetUp ? 503 : 500 },
+    );
   }
 }
