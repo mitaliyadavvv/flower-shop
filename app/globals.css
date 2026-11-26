@@ -1731,12 +1731,23 @@ em {
   pointer-events: none;
 }
 
-.booth-video {
+/* The live camera, shown directly and mirrored. The canvas on top uses the
+   same cover-crop maths, so the bouquet and fingers line up with it. */
+.booth-live {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: scaleX(-1);
+  border-radius: 18px;
   opacity: 0;
-  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+.booth-live.is-on {
+  opacity: 1;
 }
 
 .booth-top {
@@ -1768,13 +1779,17 @@ em {
   visibility: hidden;
 }
 
+.booth-frame {
+  border-radius: 18px;
+  background: linear-gradient(#f8f1e5, #f1e3cf);
+}
+
 .booth-canvas {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
   border-radius: 18px;
-  background: var(--bg-deep);
   box-shadow: 0 30px 60px -40px rgba(59, 48, 42, 0.5);
   touch-action: none;
 }
@@ -1794,7 +1809,10 @@ em {
   border-radius: 999px;
   background: rgba(253, 249, 242, 0.92);
   font-size: 14px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  text-align: center;
+  z-index: 2;
 }
 
 .booth-pose {

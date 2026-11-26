@@ -60,6 +60,8 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canShare, setCanShare] = useState(false);
+  const [trackingFailed, setTrackingFailed] = useState(false);
+  const [noPicture, setNoPicture] = useState(false);
 
   follow.current = followHands;
   size.current = sizePct / 100;
@@ -96,9 +98,17 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
         await t.start();
         if (!cancelled) setCamera("on");
       } catch {
-        t.stop();
-        trackerRef.current = null;
-        if (!cancelled) setCamera(video.srcObject ? "on" : "off");
+        if (cancelled) return;
+        if (video.srcObject) {
+          // The camera works; only hand tracking failed. Keep the picture —
+          // the shutter button still takes photos.
+          setCamera("on");
+          setTrackingFailed(true);
+        } else {
+          t.stop();
+          trackerRef.current = null;
+          setCamera("off");
+        }
       }
     })();
     // The video can be playing before the hand model has finished loading.
@@ -132,6 +142,16 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
     if (stable && !counting.current && performance.now() > cooldownUntil.current && !shotRef.current) startCountdown();
   }
 
+  // If the camera reports "on" but no frames arrive, say so instead of showing nothing.
+  useEffect(() => {
+    if (camera !== "on") return;
+    const t = window.setTimeout(() => {
+      const v = videoRef.current;
+      setNoPicture(!v || v.readyState < 2 || v.videoWidth === 0);
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, [camera]);
+
   /* ---------- drawing ---------- */
   const handLayer = useRef<HTMLCanvasElement | null>(null);
   const maskLayer = useRef<HTMLCanvasElement | null>(null);
@@ -149,15 +169,10 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
       const live = !!video && video.readyState >= 2 && video.videoWidth > 0;
       const cover = live ? coverOf(video!) : null;
 
-      // 1. Background: the camera, mirrored like a mirror.
-      if (cover) drawVideo(ctx, video!, cover);
-      else {
-        const g = ctx.createLinearGradient(0, 0, 0, H);
-        g.addColorStop(0, "#f8f1e5");
-        g.addColorStop(1, "#f1e3cf");
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-      }
+      // 1. The live camera is the real <video> element underneath (shown
+      //    directly, so every browser keeps it updating). This canvas only
+      //    holds the bouquet and the fingers drawn over it.
+      ctx.clearRect(0, 0, W, H);
 
       // 2. Where the bouquet should be.
       const now = performance.now();
@@ -254,7 +269,13 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
   const capture = useCallback(async () => {
     setFlash(true);
     window.setTimeout(() => setFlash(false), 450);
-    const p = await composePolaroid(canvasRef.current!);
+    const photo = Object.assign(document.createElement("canvas"), { width: W, height: H });
+    const pc = photo.getContext("2d")!;
+    const v = videoRef.current;
+    if (v && v.readyState >= 2 && v.videoWidth > 0) drawVideo(pc, v, coverOf(v));
+    else paintBackdrop(pc);
+    pc.drawImage(canvasRef.current!, 0, 0);
+    const p = await composePolaroid(photo);
     setShot(p);
     setSent(false);
     setError(null);
@@ -351,7 +372,6 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
       <div className="booth-src" ref={srcRef} aria-hidden>
         <Bouquet flowers={flowers} texture />
       </div>
-      <video ref={videoRef} className="booth-video" playsInline muted />
 
       <header className="booth-top">
         <p className="eyebrow">Photo booth</p>
@@ -360,6 +380,7 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
 
       <div className="booth-stage">
         <div className={`booth-frame${shot ? " is-hidden" : ""}`}>
+          <video ref={videoRef} className={`booth-live${camera === "on" ? " is-on" : ""}`} playsInline muted autoPlay />
           <canvas
             ref={canvasRef}
             width={W}
@@ -372,6 +393,8 @@ export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Prop
           />
           {camera === "starting" && <p className="booth-note">Waking up the camera…</p>}
           {camera === "off" && <p className="booth-note">No camera, but you can still take a picture of your bouquet.</p>}
+          {camera === "on" && noPicture && <p className="booth-note">The camera is on but no picture is coming through. Try closing other apps using it, then reload.</p>}
+          {camera === "on" && trackingFailed && !noPicture && <p className="booth-note">Hand poses aren’t available here. Use the round button to take your photo.</p>}
           {poseLabel && count === null && (
             <p className="booth-pose">{poseLabel === "heart" ? "♡ Lovely, hold it…" : "✌️ Hold it…"}</p>
           )}
@@ -477,6 +500,14 @@ function drawVideo(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, c: Co
   ctx.scale(-1, 1);
   ctx.drawImage(video, c.dx, c.dy, c.dw, c.dh);
   ctx.restore();
+}
+
+function paintBackdrop(ctx: CanvasRenderingContext2D) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#f8f1e5");
+  g.addColorStop(1, "#f1e3cf");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
 }
 
 /** Normalised landmark → mirrored canvas pixels. */
