@@ -10,7 +10,7 @@ import { Composition, Note, SavedBouquet, sanitizeComposition } from "./flowers"
  * (create a well-formed bouquet, read one by id — nothing else).
  */
 
-const PROJECT = process.env.FIREBASE_PROJECT_ID || "ritual-caeea";
+const PROJECT = process.env.FIREBASE_PROJECT_ID || "posy-17da6";
 const DATABASE = process.env.FIRESTORE_DATABASE || "(default)";
 const COLLECTION = "bouquets";
 const API_KEY = process.env.FIREBASE_API_KEY; // optional — only for quota attribution

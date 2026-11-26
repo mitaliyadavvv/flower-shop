@@ -25,12 +25,11 @@ Local development saves to the same Firestore project, so set up the rules below
 
 ## Firebase setup (one-time, about 2 minutes)
 
-Bouquets are stored in **Cloud Firestore** in the Firebase project `ritual-caeea`. The site calls Firestore's REST API from its own server like any public client, so **there are no secret keys and no Vercel environment variables to set**. The security rules decide what's allowed.
+Bouquets are stored in **Cloud Firestore** in the Firebase project `posy-17da6`. The site calls Firestore's REST API from its own server like any public client, so **there are no secret keys and no Vercel environment variables to set**. The security rules decide what's allowed.
 
-1. Open the [Firebase console](https://console.firebase.google.com/) and select **ritual-caeea**. Then go to **Build → Firestore Database → Rules**.
+1. Open the [Firebase console](https://console.firebase.google.com/) and select **posy-17da6**. Then go to **Build → Firestore Database → Rules**.
 2. Add the rules from [`firebase/firestore.rules`](firebase/firestore.rules):
-   - **If the project already has rules for another app** (it does if other things use it), don't replace them. Copy only the `match /bouquets/{id} { … }` block and paste it inside your existing `match /databases/{database}/documents { … }`.
-   - If the rules editor is empty or default, paste the whole file.
+   - This project is only for posy, so replace everything in the editor with the whole file.
 3. Click **Publish**.
 4. Check it: open `https://<your-site>/api/health`. `"reads": "allowed"` means you're done.
 
