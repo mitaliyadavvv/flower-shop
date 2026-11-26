@@ -9,7 +9,7 @@ const GESTURES = [
   { name: "point", title: "Point", text: "Your hand moves a little cursor. Hover over a colour or button to choose it." },
   { name: "pinch", title: "Pinch", text: "Bring thumb and finger together to pick up a flower. Let go to place it." },
   { name: "twist", title: "Twist", text: "While holding a flower, turn your wrist to turn the bloom." },
-  { name: "stretch", title: "Stretch", text: "Make an L with both hands and pull them apart for more petals, closer for fewer." },
+  { name: "stretch", title: "Stretch", text: "Make an L with both hands. Pull apart for more petals, closer for fewer, then hold still to set it." },
 ] as const;
 
 export function Intro({ onBegin }: { onBegin: (mode: "hands" | "touch") => void }) {

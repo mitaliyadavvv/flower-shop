@@ -1249,7 +1249,7 @@ em {
 }
 
 .stretch-n {
-  margin: 6px 0 0;
+  margin: 0;
   font-family: var(--serif);
   font-variation-settings: "SOFT" 100, "WONK" 1, "opsz" 144;
   font-size: 54px;
@@ -1257,6 +1257,54 @@ em {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+.stretch-count {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.stretch-ring {
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+
+.stretch-ring circle {
+  fill: none;
+  stroke: var(--rose);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: settle-fill 0.45s linear forwards;
+}
+
+.stretch-center.is-set .stretch-ring circle {
+  stroke: var(--sage);
+  stroke-dashoffset: 0;
+  animation: none;
+}
+
+@keyframes settle-fill {
+  to { stroke-dashoffset: 0; }
+}
+
+.stretch-hint {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(253, 249, 242, 0.85);
+  transition: color 0.2s;
+}
+
+.stretch-center.is-set .stretch-hint {
+  color: var(--ink);
 }
 
 .stretch-n span {

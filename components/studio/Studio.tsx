@@ -371,7 +371,20 @@ export function Studio() {
     dwellFired: false,
     lFrames: 0,
     notLFrames: 0,
-    stretch: null as null | { key: string; d0: number; p0: number; ax: number; ay: number; bx: number; by: number },
+    stretch: null as null | {
+      key: string;
+      d0: number;
+      p0: number;
+      ax: number;
+      ay: number;
+      bx: number;
+      by: number;
+      /** Petal count currently shown. */
+      n: number;
+      /** Last count that was held steady — what we keep when the hands leave. */
+      settled: number;
+      lastChange: number;
+    },
     status: "off" as HandStatus,
   });
 
@@ -422,6 +435,8 @@ export function Studio() {
 
     /* -- nobody there -- */
     if (hands.length === 0) {
+      // Hands gone mid-stretch: wrap it up right away (keeping the set count).
+      if (h.stretch && ++h.notLFrames >= 3) endStretch();
       if (!h.lostAt) h.lostAt = time;
       if (time - h.lostAt > 450) {
         cursor?.classList.add("is-lost");
@@ -444,11 +459,13 @@ export function Studio() {
     const bothL = hands.length === 2 && hands[0].isL && hands[1].isL && !held.current;
     h.lFrames = bothL ? h.lFrames + 1 : 0;
     h.notLFrames = bothL ? 0 : h.notLFrames + 1;
-    if (!h.stretch && h.lFrames >= 4) startStretch(hands);
+    if (!h.stretch && h.lFrames >= 4) startStretch(hands, time);
     if (h.stretch) {
-      if (h.notLFrames >= 8 || hands.length < 2) endStretch();
+      if (h.notLFrames >= 5 || hands.length < 2) endStretch();
       else {
-        updateStretch(hands);
+        // Only count while both hands are clearly in an L. As soon as either
+        // starts to relax (closing a fist, dropping a hand), the count freezes.
+        if (bothL) updateStretch(hands, time);
         cursor?.classList.add("is-lost");
         setStatus("stretching");
         return;
@@ -543,24 +560,26 @@ export function Studio() {
   /* -- the two-hand stretch -- */
 
   const stretchRef = useRef<HTMLDivElement>(null);
-  const [stretch, setStretch] = useState<{ key: string; petals: number; bump: number } | null>(null);
+  const [stretch, setStretch] = useState<{ key: string; petals: number; bump: number; set: boolean } | null>(null);
 
   const lPoints = (hands: HandFrame["hands"]) => {
     const [a, b] = [toScreen(hands[0].lx, hands[0].ly), toScreen(hands[1].lx, hands[1].ly)];
     return a[0] <= b[0] ? [a, b] : [b, a];
   };
 
-  function startStretch(hands: HandFrame["hands"]) {
+  const SETTLE_MS = 450;
+
+  function startStretch(hands: HandFrame["hands"], time: number) {
     const [[ax, ay], [bx, by]] = lPoints(hands);
     const key = selectedRef.current ?? "draft";
     const p0 = petalsOf(key);
-    hand.current.stretch = { key, d0: Math.hypot(bx - ax, by - ay), p0, ax, ay, bx, by };
+    hand.current.stretch = { key, d0: Math.abs(bx - ax), p0, ax, ay, bx, by, n: p0, settled: p0, lastChange: time };
     clearDwell();
-    setStretch({ key, petals: p0, bump: 0 });
+    setStretch({ key, petals: p0, bump: 0, set: true });
     placeStretch(ax, ay, bx, by);
   }
 
-  function updateStretch(hands: HandFrame["hands"]) {
+  function updateStretch(hands: HandFrame["hands"], time: number) {
     const s = hand.current.stretch;
     if (!s) return;
     const [[ax, ay], [bx, by]] = lPoints(hands);
@@ -570,18 +589,37 @@ export function Studio() {
     s.bx += (bx - s.bx) * 0.5;
     s.by += (by - s.by) * 0.5;
     placeStretch(s.ax, s.ay, s.bx, s.by);
-    const d = Math.hypot(s.bx - s.ax, s.by - s.ay);
-    const step = Math.max(38, window.innerWidth / 22);
-    const n = Math.max(MIN_PETALS, Math.min(MAX_PETALS, Math.round(s.p0 + (d - s.d0) / step)));
-    if (n !== petalsOf(s.key)) {
-      setPetalsOf(s.key, n);
-      setStretch((st) => (st ? { ...st, petals: n, bump: st.bump + 1 } : st));
+
+    // Horizontal distance only: lowering your hands doesn't change the count.
+    const d = Math.abs(s.bx - s.ax);
+    const step = Math.max(40, window.innerWidth / 20);
+    const wanted = s.p0 + (d - s.d0) / step;
+    // Dead zone: move most of a step past the current number before it changes,
+    // so it never flickers between two values.
+    if (Math.abs(wanted - s.n) > 0.8) {
+      const n = Math.max(MIN_PETALS, Math.min(MAX_PETALS, Math.round(wanted)));
+      if (n !== s.n) {
+        s.n = n;
+        s.lastChange = time;
+        setPetalsOf(s.key, n);
+        setStretch((st) => (st ? { ...st, petals: n, bump: st.bump + 1, set: false } : st));
+        return;
+      }
+    }
+    // Held steady long enough → this is the number we keep.
+    if (s.settled !== s.n && time - s.lastChange >= SETTLE_MS) {
+      s.settled = s.n;
+      setStretch((st) => (st ? { ...st, set: true } : st));
     }
   }
 
   function endStretch() {
     const h = hand.current;
-    if (!h.stretch) return;
+    const s = h.stretch;
+    if (!s) return;
+    // Anything that changed while the hands were leaving (not held steady) is undone.
+    if (s.n !== s.settled) setPetalsOf(s.key, s.settled);
+    if (s.settled !== s.p0) flash(`${s.settled} petals — set`);
     h.stretch = null;
     h.lFrames = 0;
     h.fx.reset();
@@ -903,7 +941,7 @@ export function Studio() {
           <div className="stretch-line" />
           <span className="stretch-end stretch-end--a" />
           <span className="stretch-end stretch-end--b" />
-          {stretch && <StretchBloom flower={stretch.key === "draft" ? draft : flowers.find((f) => f.id === stretch.key) ?? draft} bump={stretch.bump} />}
+          {stretch && <StretchBloom flower={stretch.key === "draft" ? draft : flowers.find((f) => f.id === stretch.key) ?? draft} bump={stretch.bump} set={stretch.set} />}
         </div>
       )}
 
@@ -957,7 +995,7 @@ function drawSkeleton(canvas: HTMLCanvasElement | null, frame: HandFrame) {
 }
 
 /** The flower shown between your hands while stretching; it hops on every change. */
-function StretchBloom({ flower, bump }: { flower: Pick<Flower, "kind" | "color" | "petals" | "seed">; bump: number }) {
+function StretchBloom({ flower, bump, set }: { flower: Pick<Flower, "kind" | "color" | "petals" | "seed">; bump: number; set: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (bump && ref.current?.animate) {
@@ -968,16 +1006,22 @@ function StretchBloom({ flower, bump }: { flower: Pick<Flower, "kind" | "color" 
     }
   }, [bump]);
   return (
-    <div className="stretch-center">
+    <div className={`stretch-center${set ? " is-set" : ""}`}>
       <div ref={ref} className="stretch-flower">
         <svg viewBox="-80 -80 160 160">
           <FlowerArt kind={flower.kind} color={flower.color} petals={flower.petals} seed={flower.seed} />
         </svg>
       </div>
-      <p className="stretch-n">
-        {flower.petals}
-        <span>petals</span>
-      </p>
+      <div className="stretch-count">
+        <svg className="stretch-ring" viewBox="0 0 44 44" aria-hidden key={bump}>
+          <circle cx="22" cy="22" r="19" pathLength={1} />
+        </svg>
+        <p className="stretch-n">
+          {flower.petals}
+          <span>petals</span>
+        </p>
+      </div>
+      <p className="stretch-hint">{set ? "Set ✓  Drop your hands to keep it" : "Hold still to set"}</p>
     </div>
   );
 }

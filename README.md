@@ -80,7 +80,8 @@ Gesture recognition is deliberately limited to four reliable movements (`lib/han
 Some details that keep it calm:
 
 - The camera frame's central area is mapped to the whole window, so you don't have to reach to the edges.
-- The stretch is measured relative to where your hands were when it started, so it doesn't matter how far apart you begin. A big flower and petal count appear between your hands while you stretch.
+- The stretch is measured relative to where your hands were when it started, so it doesn't matter how far apart you begin. It uses the horizontal distance between the index knuckles, so curling your fingers or lowering your hands doesn't count as stretching. A dead zone stops the count flickering between two numbers.
+- **Hold still to set.** Once the count hasn't changed for about 0.45 s, it locks in (the ring fills and turns green). The count only moves while *both* hands are clearly in an L. When you leave the pose (closing a fist, pulling one hand away, dropping your hands), any change made since the last lock is undone.
 - If the hand disappears for about 0.45 s, any flower you're holding is placed where it is.
 - Dropping onto the "remove" tray (shown while you're holding a flower) deletes it.
 - The video never leaves the device. The camera runs only on the arranging step and stops while you write the card.

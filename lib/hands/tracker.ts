@@ -13,7 +13,8 @@ export interface HandData {
   /** Pointer position, mirrored and normalised 0…1 within the camera frame. */
   px: number;
   py: number;
-  /** The "L" point — between thumb tip and index tip — mirrored, 0…1. */
+  /** Anchor for the two-hand stretch: the index knuckle, which barely moves when
+   *  fingers curl (so closing a fist doesn't read as moving the hand). Mirrored, 0…1. */
   lx: number;
   ly: number;
   /** Thumb–index distance divided by palm size. Small = pinching. */
@@ -126,7 +127,7 @@ function describe(lm: NormalizedLandmark[], aspect: number): HandData {
   const kx = (1 - lm[9].x) * aspect;
   const roll = Math.atan2(kx - wx, -(lm[9].y - lm[0].y));
 
-  return { px, py, lx: 1 - midX, ly: midY, pinchRatio, roll, isL: isLShape(lm, d2, palm), landmarks: lm };
+  return { px, py, lx: 1 - lm[5].x, ly: lm[5].y, pinchRatio, roll, isL: isLShape(lm, d2, palm), landmarks: lm };
 }
 
 function isLShape(lm: NormalizedLandmark[], d2: (a: number, b: number) => number, palm: number) {
