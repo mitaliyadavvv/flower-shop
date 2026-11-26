@@ -13,7 +13,15 @@ export async function GET() {
       `https://firestore.googleapis.com/v1/projects/${info.project}/databases/${encodeURIComponent(info.database)}/documents/${info.collection}/healthcheck00`,
       { cache: "no-store" },
     );
-    reads = res.status === 404 ? "allowed" : res.status === 403 ? "blocked by rules — publish firebase/firestore.rules" : `unexpected (${res.status})`;
+    const body = res.status === 403 ? await res.text() : "";
+    reads =
+      res.status === 404
+        ? "allowed"
+        : body.includes("on the service")
+          ? "Firestore database not created yet — Build → Firestore Database → Create database"
+          : res.status === 403
+            ? "blocked by rules — publish firebase/firestore.rules"
+            : `unexpected (${res.status})`;
   } catch {
     reads = "unreachable";
   }
