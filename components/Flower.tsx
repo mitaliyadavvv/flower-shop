@@ -20,7 +20,7 @@ export const FlowerArt = memo(function FlowerArt({ kind, color, petals, seed, st
   return (
     <g className={still ? "fa fa--still" : "fa"}>
       {g.petals.map((p, i) => (
-        <g key={i} className="petal" style={{ transform: `rotate(${p.angle}deg)` }}>
+        <g key={i} className="petal" style={{ transform: `translate(0px, ${p.oy ?? 0}px) rotate(${p.angle}deg)` }}>
           <g className="petal-in" style={{ "--pd": `${(i % 7) * 0.4}s` } as CSSProperties}>
             <path d={p.d} fill={fill} transform="translate(1.6 -1.2)" />
             <path d={p.d} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
@@ -30,8 +30,8 @@ export const FlowerArt = memo(function FlowerArt({ kind, color, petals, seed, st
       {g.stamens.map((d, i) => (
         <path key={`s${i}`} d={d} fill="none" stroke={INK} strokeWidth={1.1} strokeLinecap="round" />
       ))}
-      <path d={g.center} fill={g.centerFill} transform="translate(1.2 -0.8)" />
-      <path d={g.center} fill="none" stroke={INK} strokeWidth={1.4} />
+      {g.center && <path d={g.center} fill={g.centerFill} transform="translate(1.2 -0.8)" />}
+      {g.center && <path d={g.center} fill="none" stroke={INK} strokeWidth={1.4} />}
       {g.dots.map((d, i) => (
         <circle key={`d${i}`} cx={d.x} cy={d.y} r={d.r} fill={INK} />
       ))}

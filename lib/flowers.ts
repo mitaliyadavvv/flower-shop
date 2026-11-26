@@ -48,12 +48,17 @@ const CENTER_FOR: Record<ColorKey, string> = {
 export const KINDS = {
   daisy: { name: "Daisy", length: 1.0, width: 0.36, center: 0.27, petals: 10 },
   blossom: { name: "Blossom", length: 0.86, width: 1.0, center: 0.22, petals: 5 },
-  aster: { name: "Aster", length: 1.02, width: 0.4, center: 0.2, petals: 8 },
+  tulip: { name: "Tulip", length: 1.14, width: 0.66, center: 0, petals: 3 },
   cherry: { name: "Cherry", length: 0.84, width: 1.05, center: 0.15, petals: 5 },
+  // No longer offered in the studio, but kept so bouquets already sent still draw.
+  aster: { name: "Aster", length: 1.02, width: 0.4, center: 0.2, petals: 8 },
 } as const;
 
 export type KindKey = keyof typeof KINDS;
+/** Every kind that can be drawn (including retired ones). */
 export const KIND_KEYS = Object.keys(KINDS) as KindKey[];
+/** The kinds offered in the studio. */
+export const PICKER_KINDS: KindKey[] = ["daisy", "blossom", "tulip", "cherry"];
 
 export const MIN_PETALS = 3;
 export const MAX_PETALS = 12;
@@ -123,6 +128,9 @@ function halfWidth(kind: KindKey, t: number): number {
       return (t < 0.42 ? Math.sin((Math.PI * t) / 0.84) : (1 - t) / 0.58) * 0.5;
     case "cherry":
       return Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.8 + 0.1)), 0.6) * 0.5;
+    case "tulip":
+      // Rounded at the bottom, fullest a third of the way up, tapering to a point.
+      return Math.pow(Math.sin(Math.PI * (0.22 + 0.78 * t)), 0.8) * 0.5;
   }
 }
 
@@ -131,12 +139,15 @@ export function petalPath(kind: KindKey, length: number, width: number, r: Rng):
   const steps = 6;
   const left: Pt[] = [];
   const right: Pt[] = [];
+  // Tulips want smooth, confident sides; the rest can wobble a little more.
+  const wx = kind === "tulip" ? 0.025 : 0.07;
+  const wy = kind === "tulip" ? 0.01 : 0.025;
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const w = halfWidth(kind, t) * width;
-    const jy = wiggle(r, length * 0.025);
-    left.push([-w + wiggle(r, width * 0.07), -length * t + jy]);
-    right.push([w + wiggle(r, width * 0.07), -length * t + jy]);
+    const jy = wiggle(r, length * wy);
+    left.push([-w + wiggle(r, width * wx), -length * t + jy]);
+    right.push([w + wiggle(r, width * wx), -length * t + jy]);
   }
   let tip: Pt[];
   if (kind === "cherry") {
@@ -145,17 +156,20 @@ export function petalPath(kind: KindKey, length: number, width: number, r: Rng):
       [wiggle(r, 1), -length * 0.86],
       [width * 0.2, -length * 0.98],
     ];
-  } else if (kind === "aster") {
-    tip = [[wiggle(r, 1.2), -length * 1.04]];
+  } else if (kind === "aster" || kind === "tulip") {
+    tip = [[wiggle(r, 1), -length * 1.03]];
   } else {
     tip = [[wiggle(r, width * 0.08), -length * (1 + wiggle(r, 0.03))]];
   }
-  return closedPath([[0, -length * 0.06], ...left, ...tip, ...right.reverse()]);
+  // Tulip petals have a rounded cup bottom rather than meeting at a point.
+  const base: Pt = kind === "tulip" ? [0, length * 0.05] : [0, -length * 0.06];
+  return closedPath([base, ...left, ...tip, ...right.reverse()]);
 }
 
 export interface HeadGeometry {
   radius: number;
-  petals: { d: string; angle: number }[];
+  /** `oy` (when set) moves the petal's base below the centre — tulips fan up from a base. */
+  petals: { d: string; angle: number; oy?: number }[];
   center: string;
   centerFill: string;
   dots: { x: number; y: number; r: number }[];
@@ -164,6 +178,7 @@ export interface HeadGeometry {
 
 /** Build the shapes for one flower head. Petal shapes are stable per index. */
 export function headGeometry(kind: KindKey, petals: number, seed: number, color: ColorKey): HeadGeometry {
+  if (kind === "tulip") return tulipGeometry(petals, seed, color);
   const spec = KINDS[kind];
   const r = mulberry32(seed);
   const radius = HEAD;
@@ -207,6 +222,41 @@ export function headGeometry(kind: KindKey, petals: number, seed: number, color:
     centerFill: CENTER_FOR[color],
     dots,
     stamens,
+  };
+}
+
+/**
+ * Tulip: tall cupped petals fanning up from a base point. More petals make a
+ * fuller, frillier "double" tulip. The middle petals are drawn last (in front).
+ */
+function tulipGeometry(petals: number, seed: number, color: ColorKey): HeadGeometry {
+  const spec = KINDS.tulip;
+  const radius = HEAD;
+  const base = radius * 0.44;
+  const spread = Math.min(76, 22 * (petals - 1));
+  const widthScale = Math.min(1, Math.max(0.6, Math.sqrt(3 / petals) * 1.12));
+  const list: { d: string; angle: number; oy: number; order: number }[] = [];
+  for (let i = 0; i < petals; i++) {
+    const pr = mulberry32(seed * 31 + i * 7919);
+    const t = petals === 1 ? 0 : i / (petals - 1) - 0.5; // −0.5 … 0.5
+    const centrality = 1 - Math.abs(t) * 2; // 1 in the middle, 0 at the edges
+    const len = radius * spec.length * (0.9 + centrality * 0.1) * between(pr, 0.97, 1.03);
+    const wid = radius * spec.width * widthScale * (1.02 - centrality * 0.04) * between(pr, 0.95, 1.04);
+    list.push({
+      d: petalPath("tulip", len, wid, pr),
+      angle: r2(t * spread + wiggle(pr, 2.5)),
+      oy: r2(base),
+      order: centrality + wiggle(pr, 0.05),
+    });
+  }
+  list.sort((a, b) => a.order - b.order);
+  return {
+    radius,
+    petals: list.map(({ d, angle, oy }) => ({ d, angle, oy })),
+    center: "",
+    centerFill: CENTER_FOR[color],
+    dots: [],
+    stamens: [],
   };
 }
 

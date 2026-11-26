@@ -13,7 +13,7 @@ import {
   HEAD,
   INK,
   KINDS,
-  KIND_KEYS,
+  PICKER_KINDS,
   KindKey,
   MAX_FLOWERS,
   MAX_PETALS,
@@ -848,7 +848,7 @@ export function Studio() {
           <section className="ctrl">
             <h3 className="label">Flower</h3>
             <div className="kinds">
-              {KIND_KEYS.map((k) => (
+              {PICKER_KINDS.map((k) => (
                 <button
                   key={k}
                   data-dwell
