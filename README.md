@@ -70,7 +70,8 @@ Every push to `main` redeploys automatically.
 
 After reading the note, the recipient can **take a photo with their flowers** (`components/booth/PhotoBooth.tsx`):
 
-- The bouquet is drawn large over the mirrored camera feed. With **following hands** on, it moves into the recipient's hands when they hold them low, and scales to fit the gap between them. Fingers are cut out of the video (using the hand landmarks) and drawn *in front of* the wrapping paper, so it looks held.
+- The bouquet is drawn large over the mirrored camera feed. **Drag** it into place, and use the **Size** and **Tilt** (45° either way) sliders.
+- **Backgrounds:** *Room* (the camera as it is) or *Blush*, *Sky* and *Sage* pastel walls with soft layered shapes and a few hand-drawn flowers (`lib/booth/backdrops.ts`). With a pastel wall, the person is cut out of their room by MediaPipe selfie segmentation (`lib/booth/cutout.ts`, about 250 KB, loaded only when first picked, running on-device).
 - **♡ heart** (two hands) or **✌️ peace sign** held for about 0.25 s starts a 3-2-1 countdown (`lib/hands/poses.ts`). The shutter button does the same.
 - The shot becomes a polaroid (`lib/polaroid.ts`): 1080 × 1350 JPEG, kept under about 650 KB of base64.
 - After the shot: **Download**, **Share…** (native share sheet, where supported), **Retake**, and **Send it back**. Sending back has a separate, *unticked by default* box to also show it in the public gallery.

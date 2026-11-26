@@ -7,6 +7,8 @@ import { Flower } from "@/lib/flowers";
 import type { HandFrame, HandTracker } from "@/lib/hands/tracker";
 import { isHeart, isPeace } from "@/lib/hands/poses";
 import { PHOTO_H, PHOTO_W, Polaroid, composePolaroid } from "@/lib/polaroid";
+import { BACKDROPS, BackdropId, paintBackdrop } from "@/lib/booth/backdrops";
+import type { PersonCutout } from "@/lib/booth/cutout";
 
 type Pose = "heart" | "peace" | null;
 type Camera = "starting" | "on" | "off";
@@ -21,18 +23,10 @@ interface Props {
 
 const W = PHOTO_W;
 const H = PHOTO_H;
-/** The point in the bouquet (600 × 800 art) where hands hold it: just under the bow. */
+/** The point in the bouquet (600 × 800 art) it's held by: just under the bow. */
 const GRIP = { x: 300 / 600, y: 700 / 800 };
-const DEFAULT = { x: W * 0.5, y: H * 1.0, h: H * 0.76 };
+const START = { x: W * 0.5, y: H * 0.98, h: H * 0.74 };
 const POSE_FRAMES = 8;
-
-const FINGERS = [
-  [1, 2, 3, 4],
-  [5, 6, 7, 8],
-  [9, 10, 11, 12],
-  [13, 14, 15, 16],
-  [17, 18, 19, 20],
-];
 
 /**
  * Rendered straight onto <body>, outside the bouquet page's layout, with page
@@ -58,23 +52,27 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const srcRef = useRef<HTMLDivElement>(null);
   const trackerRef = useRef<HandTracker | null>(null);
+  const cutoutRef = useRef<PersonCutout | null>(null);
   const art = useRef<HTMLImageElement | null>(null);
-  const hands = useRef<{ frame: HandFrame | null; aspect: number }>({ frame: null, aspect: 4 / 3 });
-  const place = useRef({ ...DEFAULT, tx: DEFAULT.x, ty: DEFAULT.y, th: DEFAULT.h, lastHands: 0 });
+  const backdrops = useRef<Partial<Record<BackdropId, HTMLCanvasElement>>>({});
+  const personLayer = useRef<HTMLCanvasElement | null>(null);
+  const place = useRef({ x: START.x, y: START.y });
   const pose = useRef<{ name: Pose; frames: number }>({ name: null, frames: 0 });
   const counting = useRef(false);
   const cooldownUntil = useRef(0);
-  const follow = useRef(true);
-  const size = useRef(1);
+  const shotRef = useRef<Polaroid | null>(null);
   const drag = useRef<null | { dx: number; dy: number }>(null);
+  const settings = useRef({ size: 1, tilt: 0, backdrop: "room" as BackdropId });
 
   const [camera, setCamera] = useState<Camera>("starting");
   const [poseLabel, setPoseLabel] = useState<Pose>(null);
   const [count, setCount] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [shot, setShot] = useState<Polaroid | null>(null);
-  const [followHands, setFollowHands] = useState(true);
   const [sizePct, setSizePct] = useState(100);
+  const [tilt, setTilt] = useState(0);
+  const [backdrop, setBackdrop] = useState<BackdropId>("room");
+  const [cutoutState, setCutoutState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const [toGallery, setToGallery] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -85,12 +83,10 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   const startError = useRef("");
   const [diag, setDiag] = useState<string | null>(null);
 
-  follow.current = followHands;
+  settings.current = { size: sizePct / 100, tilt, backdrop };
+  shotRef.current = shot;
   const cameraRef = useRef(camera);
   cameraRef.current = camera;
-  const trackingFailedRef = useRef(trackingFailed);
-  trackingFailedRef.current = trackingFailed;
-  size.current = sizePct / 100;
 
   /* ---------- the bouquet as a crisp still image ---------- */
   useEffect(() => {
@@ -108,7 +104,18 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
     return () => URL.revokeObjectURL(url);
   }, [flowers]);
 
-  /* ---------- camera + hand tracking ---------- */
+  /* ---------- backdrops, painted once ---------- */
+  useEffect(() => {
+    for (const b of BACKDROPS) {
+      if (b.id === "room") continue;
+      const c = Object.assign(document.createElement("canvas"), { width: W, height: H });
+      paintBackdrop(c.getContext("2d")!, b, W, H);
+      backdrops.current[b.id] = c;
+    }
+    personLayer.current = Object.assign(document.createElement("canvas"), { width: W, height: H });
+  }, []);
+
+  /* ---------- camera + hand gestures (for ♡ / ✌️) ---------- */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -127,8 +134,7 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
         startError.current = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
         if (cancelled) return;
         if (video.srcObject) {
-          // The camera works; only hand tracking failed. Keep the picture —
-          // the shutter button still takes photos.
+          // The camera works; only hand tracking failed. The shutter button still works.
           setCamera("on");
           setTrackingFailed(true);
         } else {
@@ -138,7 +144,6 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
         }
       }
     })();
-    // The video can be playing before the hand model has finished loading.
     const v = videoRef.current;
     const onPlay = () => !cancelled && setCamera("on");
     v?.addEventListener("playing", onPlay);
@@ -147,6 +152,8 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
       v?.removeEventListener("playing", onPlay);
       trackerRef.current?.stop();
       trackerRef.current = null;
+      cutoutRef.current?.close();
+      cutoutRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -154,7 +161,6 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   function onFrame(f: HandFrame) {
     const v = videoRef.current;
     const aspect = v && v.videoHeight ? v.videoWidth / v.videoHeight : 4 / 3;
-    hands.current = { frame: f, aspect };
     let p: Pose = null;
     if (f.hands.length === 2 && isHeart(f.hands[0].landmarks, f.hands[1].landmarks, aspect)) p = "heart";
     else if (f.hands.some((h) => isPeace(h.landmarks, aspect))) p = "peace";
@@ -169,7 +175,29 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
     if (stable && !counting.current && performance.now() > cooldownUntil.current && !shotRef.current) startCountdown();
   }
 
-  // If the camera reports "on" but no frames arrive, say so instead of showing nothing.
+  /* ---------- person cut-out, loaded the first time a backdrop is picked ---------- */
+  useEffect(() => {
+    if (backdrop === "room" || cutoutRef.current) return;
+    let cancelled = false;
+    setCutoutState("loading");
+    (async () => {
+      try {
+        const { PersonCutout } = await import("@/lib/booth/cutout");
+        const c = new PersonCutout();
+        await c.load();
+        if (cancelled) return c.close();
+        cutoutRef.current = c;
+        setCutoutState("ready");
+      } catch {
+        if (!cancelled) setCutoutState("failed");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backdrop]);
+
+  // If the camera says "on" but no frames arrive, say so instead of showing nothing.
   useEffect(() => {
     if (camera !== "on") return;
     const t = window.setTimeout(() => {
@@ -179,24 +207,18 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
     return () => window.clearTimeout(t);
   }, [camera]);
 
-  // Diagnostics, shown with ?debug in the URL: what the camera is actually doing.
+  // Diagnostics, shown with ?debug in the URL.
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has("debug")) return;
     const t = window.setInterval(() => {
       const v = videoRef.current;
-      const stream = v?.srcObject as MediaStream | null;
-      const track = stream?.getVideoTracks()[0];
-      const set = track?.getSettings?.();
-      const frame = v?.closest(".booth-frame")?.getBoundingClientRect();
-      const cs = v ? getComputedStyle(v) : null;
+      const track = (v?.srcObject as MediaStream | null)?.getVideoTracks()[0];
       setDiag(
         [
-          `state=${cameraRef.current} hands=${hands.current.frame?.hands.length ?? "-"} trackingFailed=${trackingFailedRef.current}`,
-          `video ready=${v?.readyState} ${v?.videoWidth}x${v?.videoHeight} paused=${v?.paused} t=${v?.currentTime.toFixed(1)}`,
-          `track=${track ? `${track.readyState} enabled=${track.enabled} muted=${track.muted} ${set?.width}x${set?.height}` : "none"}`,
-          `video css op=${cs?.opacity} disp=${cs?.display} box=${frame ? `${Math.round(frame.width)}x${Math.round(frame.height)}` : "-"}`,
+          `state=${cameraRef.current} backdrop=${settings.current.backdrop} cutout=${cutoutRef.current?.hasMask ?? false}`,
+          `video ready=${v?.readyState} ${v?.videoWidth}x${v?.videoHeight} paused=${v?.paused}`,
+          `track=${track ? `${track.readyState} muted=${track.muted}` : "none"}`,
           `error=${startError.current || "none"}`,
-          `ua=${navigator.userAgent.replace(/^Mozilla\/5.0 /, "").slice(0, 90)}`,
         ].join("\n"),
       );
     }, 500);
@@ -204,109 +226,54 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   }, []);
 
   /* ---------- drawing ---------- */
-  const handLayer = useRef<HTMLCanvasElement | null>(null);
-  const maskLayer = useRef<HTMLCanvasElement | null>(null);
-
   useEffect(() => {
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    handLayer.current = Object.assign(document.createElement("canvas"), { width: W, height: H });
-    maskLayer.current = Object.assign(document.createElement("canvas"), { width: W, height: H });
+    const ctx = canvasRef.current!.getContext("2d")!;
     let raf = 0;
-
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const video = videoRef.current;
       const live = !!video && video.readyState >= 2 && video.videoWidth > 0;
       const cover = live ? coverOf(video!) : null;
+      const { backdrop: bd, size, tilt } = settings.current;
+      const wall = bd !== "room" ? backdrops.current[bd] : undefined;
+      const cutout = cutoutRef.current;
 
-      // 1. The live camera is the real <video> element underneath (shown
-      //    directly, so every browser keeps it updating). This canvas only
-      //    holds the bouquet and the fingers drawn over it.
-      ctx.clearRect(0, 0, W, H);
-
-      // 2. Where the bouquet should be.
-      const now = performance.now();
-      const pl = place.current;
-      const frame = hands.current.frame;
-      const fresh = frame && now - frame.time < 250 ? frame.hands : [];
-      if (cover && follow.current && !counting.current && !pose.current.name && !drag.current) {
-        const palms = fresh.map((h) => {
-          const lm = h.landmarks;
-          return toCanvas((lm[0].x + lm[9].x) / 2, (lm[0].y + lm[9].y) / 2, cover);
-        });
-        if (palms.length === 2) {
-          const d = Math.hypot(palms[1][0] - palms[0][0], palms[1][1] - palms[0][1]);
-          if (d < W * 0.55) {
-            pl.tx = (palms[0][0] + palms[1][0]) / 2;
-            pl.ty = (palms[0][1] + palms[1][1]) / 2;
-            // Size the wrap to fit between the hands, so they close around it.
-            pl.th = Math.min(H * 1.15, Math.max(H * 0.5, d * 4.4));
-            pl.lastHands = now;
-          }
-        } else if (palms.length === 1) {
-          pl.tx = palms[0][0];
-          pl.ty = palms[0][1];
-          pl.lastHands = now;
+      // 1. Background: a pastel backdrop with the person cut out in front, or the room as it is.
+      if (wall && cover && cutout?.ready) {
+        cutout.update(video!);
+        ctx.drawImage(wall, 0, 0);
+        if (cutout.hasMask && personLayer.current) {
+          const pl = personLayer.current.getContext("2d")!;
+          pl.globalCompositeOperation = "source-over";
+          pl.clearRect(0, 0, W, H);
+          drawVideo(pl, video!, cover);
+          pl.globalCompositeOperation = "destination-in";
+          pl.imageSmoothingEnabled = true;
+          if ("filter" in pl) pl.filter = "blur(1.5px)";
+          drawMirrored(pl, cutout.mask, cover);
+          if ("filter" in pl) pl.filter = "none";
+          pl.globalCompositeOperation = "source-over";
+          ctx.drawImage(personLayer.current, 0, 0);
         }
+      } else if (wall && !cover) {
+        ctx.drawImage(wall, 0, 0);
+      } else if (cover) {
+        drawVideo(ctx, video!, cover);
+      } else {
+        paintPlain(ctx);
       }
-      if (follow.current && now - pl.lastHands > 1600 && !drag.current) {
-        pl.tx = DEFAULT.x;
-        pl.ty = DEFAULT.y;
-        pl.th = DEFAULT.h;
-      }
-      pl.x += (pl.tx - pl.x) * 0.22;
-      pl.y += (pl.ty - pl.y) * 0.22;
-      pl.h += (pl.th - pl.h) * 0.1;
 
-      // 3. The bouquet, with a gentle sway.
+      // 2. The bouquet: placed by dragging, with size and tilt.
       const img = art.current;
       if (img) {
-        const h = pl.h * size.current;
+        const h = START.h * size;
         const w = h * 0.75;
-        const sway = Math.sin(now / 1400) * 0.012;
+        const sway = Math.sin(performance.now() / 1400) * 0.01;
         ctx.save();
-        ctx.translate(pl.x, pl.y);
-        ctx.rotate(sway);
+        ctx.translate(place.current.x, place.current.y);
+        ctx.rotate((tilt * Math.PI) / 180 + sway);
         ctx.drawImage(img, -GRIP.x * w, -GRIP.y * h, w, h);
         ctx.restore();
-      }
-
-      // 4. Fingers in front of the bouquet, so it looks held.
-      if (cover && fresh.length && handLayer.current && maskLayer.current) {
-        const m = maskLayer.current.getContext("2d")!;
-        m.clearRect(0, 0, W, H);
-        m.strokeStyle = "#fff";
-        m.fillStyle = "#fff";
-        m.lineCap = "round";
-        m.lineJoin = "round";
-        for (const hand of fresh) {
-          const pts = hand.landmarks.map((p) => toCanvas(p.x, p.y, cover));
-          const palm = Math.hypot(pts[9][0] - pts[0][0], pts[9][1] - pts[0][1]);
-          FINGERS.forEach((chain, i) => {
-            m.lineWidth = palm * (i === 0 ? 0.34 : i === 4 ? 0.22 : 0.27);
-            m.beginPath();
-            m.moveTo(pts[chain[0]][0], pts[chain[0]][1]);
-            for (const k of chain.slice(1)) m.lineTo(pts[k][0], pts[k][1]);
-            m.stroke();
-          });
-          m.lineWidth = palm * 0.3;
-          m.beginPath();
-          for (const [i, k] of [0, 1, 2, 5, 9, 13, 17].entries()) (i ? m.lineTo : m.moveTo).call(m, pts[k][0], pts[k][1]);
-          m.closePath();
-          m.fill();
-          m.stroke();
-        }
-        const hl = handLayer.current.getContext("2d")!;
-        hl.globalCompositeOperation = "source-over";
-        hl.clearRect(0, 0, W, H);
-        drawVideo(hl, video!, cover);
-        hl.globalCompositeOperation = "destination-in";
-        if ("filter" in hl) hl.filter = "blur(3px)";
-        hl.drawImage(maskLayer.current, 0, 0);
-        if ("filter" in hl) hl.filter = "none";
-        hl.globalCompositeOperation = "source-over";
-        ctx.drawImage(handLayer.current, 0, 0);
       }
     };
     draw();
@@ -314,19 +281,10 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   }, []);
 
   /* ---------- taking the photo ---------- */
-  const shotRef = useRef<Polaroid | null>(null);
-  shotRef.current = shot;
-
   const capture = useCallback(async () => {
     setFlash(true);
     window.setTimeout(() => setFlash(false), 450);
-    const photo = Object.assign(document.createElement("canvas"), { width: W, height: H });
-    const pc = photo.getContext("2d")!;
-    const v = videoRef.current;
-    if (v && v.readyState >= 2 && v.videoWidth > 0) drawVideo(pc, v, coverOf(v));
-    else paintBackdrop(pc);
-    pc.drawImage(canvasRef.current!, 0, 0);
-    const p = await composePolaroid(photo);
+    const p = await composePolaroid(canvasRef.current!);
     setShot(p);
     setSent(false);
     setError(null);
@@ -394,13 +352,13 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
     }
   };
 
-  /* ---------- manual placement (when not following hands) ---------- */
+  /* ---------- placing the bouquet by dragging ---------- */
   const toLocal = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H];
   };
   const onDown = (e: React.PointerEvent) => {
-    if ((followHands && camera === "on") || shot) return;
+    if (shot) return;
     const [x, y] = toLocal(e);
     drag.current = { dx: place.current.x - x, dy: place.current.y - y };
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -408,15 +366,28 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   const onMove = (e: React.PointerEvent) => {
     if (!drag.current) return;
     const [x, y] = toLocal(e);
-    place.current.tx = x + drag.current.dx;
-    place.current.ty = y + drag.current.dy;
+    place.current.x = Math.min(W, Math.max(0, x + drag.current.dx));
+    place.current.y = Math.min(H * 1.25, Math.max(H * 0.25, y + drag.current.dy));
   };
   const onUp = () => {
     drag.current = null;
-    place.current.lastHands = Infinity; // stay where it was put
   };
 
   const who = sender.trim() || "them";
+  const note =
+    camera === "starting"
+      ? "Waking up the camera…"
+      : camera === "off"
+        ? "No camera, but you can still take a picture of your bouquet."
+        : noPicture
+          ? "The camera is on but no picture is coming through. Try closing other apps using it, then reload."
+          : backdrop !== "room" && cutoutState === "loading"
+            ? "Preparing the backdrop…"
+            : backdrop !== "room" && cutoutState === "failed"
+              ? "This backdrop couldn’t load here. Try “Room”."
+              : trackingFailed
+                ? "Hand poses aren’t available here. Use the round button to take your photo."
+                : null;
 
   return (
     <div className="booth" role="dialog" aria-label="Take a photo with your flowers">
@@ -431,24 +402,20 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
 
       <div className="booth-stage">
         <div className={`booth-frame${shot ? " is-hidden" : ""}`}>
-          <video ref={videoRef} className={`booth-live${camera === "on" ? " is-on" : ""}`} playsInline muted autoPlay />
+          {/* The camera stays on screen (under the canvas) so every browser keeps it running. */}
+          <video ref={videoRef} className="booth-live is-on" playsInline muted autoPlay />
           <canvas
             ref={canvasRef}
             width={W}
             height={H}
-            className={`booth-canvas${followHands && camera === "on" ? "" : " is-draggable"}`}
+            className="booth-canvas is-draggable"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerCancel={onUp}
           />
-          {camera === "starting" && <p className="booth-note">Waking up the camera…</p>}
-          {camera === "off" && <p className="booth-note">No camera, but you can still take a picture of your bouquet.</p>}
-          {camera === "on" && noPicture && <p className="booth-note">The camera is on but no picture is coming through. Try closing other apps using it, then reload.</p>}
-          {camera === "on" && trackingFailed && !noPicture && <p className="booth-note">Hand poses aren’t available here. Use the round button to take your photo.</p>}
-          {poseLabel && count === null && (
-            <p className="booth-pose">{poseLabel === "heart" ? "♡ Lovely, hold it…" : "✌️ Hold it…"}</p>
-          )}
+          {note && <p className="booth-note">{note}</p>}
+          {poseLabel && count === null && <p className="booth-pose">{poseLabel === "heart" ? "♡ Lovely, hold it…" : "✌️ Hold it…"}</p>}
           {count !== null && (
             <p className="booth-count" key={count}>
               {count}
@@ -468,29 +435,37 @@ function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
 
       {!shot ? (
         <footer className="booth-controls">
-          <p className="booth-tip">
-            {camera === "on"
-              ? followHands
-                ? "Hold your hands low and the bouquet moves into them. Make a ♡ or ✌️ to snap."
-                : "Drag the bouquet to place it. Make a ♡ or ✌️ to snap."
-              : "Drag the bouquet to place it."}
-          </p>
+          <div className="backdrops" role="radiogroup" aria-label="Background">
+            {BACKDROPS.map((b) => (
+              <button
+                key={b.id}
+                role="radio"
+                aria-checked={backdrop === b.id}
+                className={`backdrop${backdrop === b.id ? " is-on" : ""}`}
+                onClick={() => setBackdrop(b.id)}
+              >
+                <span className="backdrop-swatch" style={{ background: b.swatch }} />
+                {b.name}
+              </button>
+            ))}
+          </div>
           <div className="booth-row">
-            <label className="booth-size">
-              <span>Size</span>
-              <input type="range" min={70} max={140} value={sizePct} onChange={(e) => setSizePct(Number(e.target.value))} />
-            </label>
+            <div className="booth-sliders">
+              <label className="booth-size">
+                <span>Size</span>
+                <input type="range" min={60} max={150} value={sizePct} onChange={(e) => setSizePct(Number(e.target.value))} />
+              </label>
+              <label className="booth-size">
+                <span>Tilt</span>
+                <input type="range" min={-45} max={45} value={tilt} onChange={(e) => setTilt(Number(e.target.value))} onDoubleClick={() => setTilt(0)} />
+                <span className="booth-deg">{tilt > 0 ? `${tilt}° right` : tilt < 0 ? `${-tilt}° left` : "straight"}</span>
+              </label>
+            </div>
             <button className="shutter" onClick={() => startCountdown()} aria-label="Take photo (3 second timer)" disabled={count !== null}>
               <span />
             </button>
-            {camera === "on" ? (
-              <button className="chip-btn" onClick={() => setFollowHands((f) => !f)} aria-pressed={followHands}>
-                {followHands ? "Following hands" : "Placing by hand"}
-              </button>
-            ) : (
-              <span className="booth-spacer" />
-            )}
           </div>
+          <p className="booth-tip">Drag the bouquet to place it. Make a ♡ with your hands or a ✌️, or press the button.</p>
         </footer>
       ) : (
         <footer className="booth-controls booth-controls--review">
@@ -546,23 +521,23 @@ function coverOf(video: HTMLVideoElement): Cover {
   return { dw, dh, dx: (W - dw) / 2, dy: (H - dh) / 2 };
 }
 
-function drawVideo(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, c: Cover) {
+/** Draw a camera-frame-sized source mirrored and cover-cropped into the photo. */
+function drawMirrored(ctx: CanvasRenderingContext2D, src: CanvasImageSource, c: Cover) {
   ctx.save();
   ctx.translate(W, 0);
   ctx.scale(-1, 1);
-  ctx.drawImage(video, c.dx, c.dy, c.dw, c.dh);
+  ctx.drawImage(src, c.dx, c.dy, c.dw, c.dh);
   ctx.restore();
 }
 
-function paintBackdrop(ctx: CanvasRenderingContext2D) {
+function drawVideo(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, c: Cover) {
+  drawMirrored(ctx, video, c);
+}
+
+function paintPlain(ctx: CanvasRenderingContext2D) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, "#f8f1e5");
   g.addColorStop(1, "#f1e3cf");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
-}
-
-/** Normalised landmark → mirrored canvas pixels. */
-function toCanvas(x: number, y: number, c: Cover): [number, number] {
-  return [W - (x * c.dw + c.dx), y * c.dh + c.dy];
 }

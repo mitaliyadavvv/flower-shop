@@ -1934,6 +1934,55 @@ em {
   width: 140px;
 }
 
+.backdrops {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.backdrop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.3s var(--spring), background 0.2s;
+}
+
+.backdrop:hover {
+  transform: translateY(-1px);
+}
+
+.backdrop.is-on {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink) inset;
+}
+
+.backdrop-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.4px solid var(--ink);
+}
+
+.booth-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.booth-deg {
+  min-width: 70px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
 .booth-size {
   display: flex;
   align-items: center;
