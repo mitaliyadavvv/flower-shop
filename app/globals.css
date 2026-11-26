@@ -1712,6 +1712,9 @@ em {
    Photo booth
    ========================================================================== */
 
+/* No animation on the full-screen overlay itself: in Chromium browsers an
+   animated fixed overlay can fail to paint when the page is scrolled. The
+   gentle entrance happens on its contents instead. */
 .booth {
   position: fixed;
   inset: 0;
@@ -1719,7 +1722,15 @@ em {
   background: var(--bg);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  animation: fade-up 0.5s var(--ease) both;
+}
+
+.booth > * {
+  animation: booth-in 0.5s var(--ease) both;
+}
+
+@keyframes booth-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .booth-src {

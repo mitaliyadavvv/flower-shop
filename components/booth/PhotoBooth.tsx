@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bouquet } from "@/components/Bouquet";
 import { Flower } from "@/lib/flowers";
 import type { HandFrame, HandTracker } from "@/lib/hands/tracker";
@@ -33,7 +34,26 @@ const FINGERS = [
   [17, 18, 19, 20],
 ];
 
-export function PhotoBooth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
+/**
+ * Rendered straight onto <body>, outside the bouquet page's layout, with page
+ * scrolling locked while it's open — so the full-screen overlay always paints,
+ * whatever the page scroll position.
+ */
+export function PhotoBooth(props: Props) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHost(document.body);
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, []);
+  return host ? createPortal(<Booth {...props} />, host) : null;
+}
+
+function Booth({ bouquetId, flowers, sender, onClose, onSent }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const srcRef = useRef<HTMLDivElement>(null);
