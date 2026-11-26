@@ -10,8 +10,8 @@ import { Composition, Note, SavedBouquet, sanitizeComposition } from "./flowers"
  * are kept as JSON files in ./.data so everything works out of the box.
  */
 
-const URL_ = process.env.SUPABASE_URL?.replace(/\/$/, "");
-const KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const URL_ = process.env.SUPABASE_URL?.trim().replace(/\/$/, "");
+const KEY = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
 const LOCAL_DIR = path.join(process.cwd(), ".data", "bouquets");
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
