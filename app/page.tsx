@@ -8,7 +8,7 @@ export default function Home() {
     <div className="home">
       <header className="page-top">
         <Wordmark />
-        <span className="page-top-note">A tiny flower studio</span>
+        <Link href="/gallery" className="page-top-link">Gallery</Link>
       </header>
 
       <main className="home-hero">

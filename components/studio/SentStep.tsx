@@ -88,6 +88,7 @@ export function SentStep({ id, flowers, to, onAgain }: Props) {
               Preview it
             </Link>
           </div>
+          <p className="fine">Keep this link. If they take a photo with your flowers and send it back, it’ll appear there.</p>
           <button className="link-btn" onClick={onAgain}>Make another bouquet</button>
         </div>
       </main>

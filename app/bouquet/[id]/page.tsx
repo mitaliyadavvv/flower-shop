@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Reveal } from "@/components/Reveal";
-import { getBouquet } from "@/lib/store";
+import { getBouquet, listBouquetPhotos } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -20,5 +20,6 @@ export default async function BouquetPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const bouquet = await getBouquet(id);
   if (!bouquet) notFound();
-  return <Reveal bouquet={bouquet} />;
+  const photos = await listBouquetPhotos(id);
+  return <Reveal bouquet={bouquet} photos={photos} />;
 }

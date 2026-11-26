@@ -38,12 +38,21 @@ export class HandTracker {
   private lastVideoTime = -1;
   private stopped = false;
 
-  constructor(private video: HTMLVideoElement, private onFrame: (f: HandFrame) => void) {}
+  constructor(
+    private video: HTMLVideoElement,
+    private onFrame: (f: HandFrame) => void,
+    private resolution: { width: number; height: number } = { width: 640, height: 480 },
+  ) {}
 
   async start() {
     this.stopped = false;
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 }, facingMode: "user" },
+      video: {
+        width: { ideal: this.resolution.width },
+        height: { ideal: this.resolution.height },
+        frameRate: { ideal: 30 },
+        facingMode: "user",
+      },
       audio: false,
     });
     if (this.stopped) return this.release();

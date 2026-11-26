@@ -5,12 +5,22 @@ import Link from "next/link";
 import { Bouquet } from "./Bouquet";
 import { FlowerArt } from "./Flower";
 import { Wordmark } from "./Wordmark";
+import dynamic from "next/dynamic";
 import { SavedBouquet } from "@/lib/flowers";
+
+const PhotoBooth = dynamic(() => import("./booth/PhotoBooth").then((m) => m.PhotoBooth), { ssr: false });
+
+export interface PhotoRef {
+  id: string;
+  createdAt: string;
+}
 
 type Stage = "arrive" | "bloom" | "card";
 
-export function Reveal({ bouquet }: { bouquet: SavedBouquet }) {
+export function Reveal({ bouquet, photos: initialPhotos = [] }: { bouquet: SavedBouquet; photos?: PhotoRef[] }) {
   const [stage, setStage] = useState<Stage>("arrive");
+  const [booth, setBooth] = useState(false);
+  const [photos, setPhotos] = useState<PhotoRef[]>(initialPhotos);
   const [play, setPlay] = useState(0);
   const [noteReady, setNoteReady] = useState(false);
   const { flowers } = bouquet.composition;
@@ -32,6 +42,16 @@ export function Reveal({ bouquet }: { bouquet: SavedBouquet }) {
       <header className="page-top page-top--center">
         <Wordmark />
       </header>
+
+      {booth && (
+        <PhotoBooth
+          bouquetId={bouquet.id}
+          flowers={flowers}
+          sender={from}
+          onClose={() => setBooth(false)}
+          onSent={(ph) => setPhotos((list) => [ph, ...list])}
+        />
+      )}
 
       {stage === "arrive" && (
         <main className="arrive">
@@ -82,6 +102,9 @@ export function Reveal({ bouquet }: { bouquet: SavedBouquet }) {
 
           {stage === "card" && (
             <nav className="unwrap-after">
+              <button className="btn btn--primary btn--small" onClick={() => setBooth(true)}>
+                Take a photo with your flowers
+              </button>
               <button className="link-btn" onClick={() => { setPlay((p) => p + 1); setStage("bloom"); }}>
                 Watch it bloom again
               </button>
@@ -89,6 +112,27 @@ export function Reveal({ bouquet }: { bouquet: SavedBouquet }) {
                 Make a bouquet of your own
               </Link>
             </nav>
+          )}
+
+          {stage === "card" && photos.length > 0 && (
+            <section className="sentback" aria-label="Photos with these flowers">
+              <p className="eyebrow">Photos with these flowers</p>
+              <div className="sentback-grid">
+                {photos.map((ph, i) => (
+                  <a
+                    key={ph.id}
+                    href={`/api/bouquets/${bouquet.id}/photos/${ph.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mini-polaroid"
+                    style={{ transform: `rotate(${(i % 2 ? 1 : -1) * (1 + (i % 3))}deg)` }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/bouquets/${bouquet.id}/photos/${ph.id}`} alt="A photo with this bouquet" loading="lazy" />
+                  </a>
+                ))}
+              </div>
+            </section>
           )}
         </main>
       )}

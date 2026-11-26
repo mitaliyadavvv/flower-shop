@@ -90,3 +90,84 @@ export async function getBouquet(id: string): Promise<SavedBouquet | null> {
     createdAt: f.created_at?.timestampValue ?? doc.createTime ?? "",
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Photos                                                              */
+/*                                                                     */
+/*   bouquets/{id}/photos/{pid}  – sent back to the sender; only       */
+/*                                 reachable by people with the link    */
+/*   gallery/{gid}               – opted into the public gallery; no   */
+/*                                 names, no link back to the bouquet  */
+/* ------------------------------------------------------------------ */
+
+const DOCS = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/${encodeURIComponent(DATABASE)}/documents`;
+export const MAX_IMAGE_CHARS = 900_000; // keeps each document safely under Firestore's 1 MiB
+
+export interface PhotoRef {
+  id: string;
+  createdAt: string;
+}
+
+async function createDoc(path: string, docId: string, fields: Fields) {
+  const res = await fetch(withKey(`${DOCS}/${path}?documentId=${docId}`), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fields }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new StorageError(`Firestore write failed (${res.status}): ${(await res.text()).slice(0, 300)}`, res.status);
+}
+
+export async function savePhoto(bouquetId: string, image: string, toGallery: boolean): Promise<{ id: string; galleryId: string | null }> {
+  const created_at = { timestampValue: new Date().toISOString() };
+  const id = makeId(12);
+  await createDoc(`${COLLECTION}/${bouquetId}/photos`, id, { image: { stringValue: image }, created_at });
+  let galleryId: string | null = null;
+  if (toGallery) {
+    galleryId = makeId(12);
+    await createDoc("gallery", galleryId, { image: { stringValue: image }, created_at });
+  }
+  return { id, galleryId };
+}
+
+async function listIds(parent: string, collectionId: string, limit: number): Promise<PhotoRef[]> {
+  const res = await fetch(withKey(`${parent}:runQuery`), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      structuredQuery: {
+        select: { fields: [{ fieldPath: "created_at" }] },
+        from: [{ collectionId }],
+        orderBy: [{ field: { fieldPath: "created_at" }, direction: "DESCENDING" }],
+        limit,
+      },
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    console.error("Firestore query failed", res.status, (await res.text()).slice(0, 300));
+    return [];
+  }
+  const rows = (await res.json()) as { document?: { name: string; fields?: Fields } }[];
+  return rows
+    .filter((r) => r.document)
+    .map((r) => ({
+      id: r.document!.name.split("/").pop()!,
+      createdAt: r.document!.fields?.created_at?.timestampValue ?? "",
+    }));
+}
+
+export const listBouquetPhotos = (bouquetId: string) =>
+  /^[A-Za-z0-9]{8,16}$/.test(bouquetId) ? listIds(`${DOCS}/${COLLECTION}/${bouquetId}`, "photos", 12) : Promise.resolve([]);
+
+export const listGallery = (limit = 36) => listIds(DOCS, "gallery", limit);
+
+/** Returns the JPEG bytes for a stored photo, or null. */
+export async function getPhotoBytes(path: string): Promise<Buffer | null> {
+  const res = await fetch(withKey(`${DOCS}/${path}`), { cache: "no-store" });
+  if (!res.ok) return null;
+  const doc = (await res.json()) as { fields?: Fields };
+  const data = doc.fields?.image?.stringValue ?? "";
+  const m = /^data:image\/jpeg;base64,(.+)$/.exec(data);
+  return m ? Buffer.from(m[1], "base64") : null;
+}

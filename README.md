@@ -66,6 +66,29 @@ Every push to `main` redeploys automatically.
 
 ---
 
+## Photo booth, sending photos back, and the gallery
+
+After reading the note, the recipient can **take a photo with their flowers** (`components/booth/PhotoBooth.tsx`):
+
+- The bouquet is drawn large over the mirrored camera feed. With **following hands** on, it moves into the recipient's hands when they hold them low, and scales to fit the gap between them. Fingers are cut out of the video (using the hand landmarks) and drawn *in front of* the wrapping paper, so it looks held.
+- **♡ heart** (two hands) or **✌️ peace sign** held for about 0.25 s starts a 3-2-1 countdown (`lib/hands/poses.ts`). The shutter button does the same.
+- The shot becomes a polaroid (`lib/polaroid.ts`): 1080 × 1350 JPEG, kept under about 650 KB of base64.
+- After the shot: **Download**, **Share…** (native share sheet, where supported), **Retake**, and **Send it back**. Sending back has a separate, *unticked by default* box to also show it in the public gallery.
+- Without a camera, the booth still works with a plain backdrop and a draggable bouquet.
+
+Storage, all in Firestore (Firebase Storage would need the paid plan):
+
+| path                           | who can see it                                       |
+| ------------------------------ | ---------------------------------------------------- |
+| `bouquets/{id}/photos/{photo}` | anyone with that bouquet's link; shown under the note |
+| `gallery/{photo}`              | public at `/gallery`; no names, no link to the bouquet |
+
+Images are served by `/api/bouquets/{id}/photos/{photo}` and `/api/gallery/{photo}` as cached JPEGs. The server checks uploads (real JPEG, size limits, existing bouquet), and the rules enforce the same limits.
+
+**Moderation:** the gallery isn't moderated automatically. To remove a photo, delete its document in Firebase console → Firestore → `gallery`.
+
+---
+
 ## How the gestures work
 
 Gesture recognition is deliberately limited to four reliable movements (`lib/hands/tracker.ts`):
@@ -99,6 +122,8 @@ app/
   bouquet/[id]/page.tsx    recipient reveal (server-fetched)
   api/bouquets/route.ts    POST: validate + save, returns { id }
   api/health/route.ts      setup check: can this deployment read bouquets?
+  api/bouquets/[id]/photos photo upload + image routes
+  gallery/page.tsx         public gallery
   globals.css              the whole visual system
 components/
   Flower.tsx               FlowerArt (a single illustrated head) + positioned, swaying head

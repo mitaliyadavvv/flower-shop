@@ -1,20 +1,15 @@
-// posy — Firestore rules for the `bouquets` collection.
-//
-// If this Firebase project already has rules for another app, DON'T replace
-// them: copy only the `match /bouquets/{id} { … }` block below into your
-// existing `match /databases/{database}/documents { … }` section.
+// posy — Firestore rules. This project is only for posy, so publish this
+// whole file in Firebase console → Firestore Database → Rules.
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Bouquets: anyone with the link can open that one bouquet. Nobody can
+    // browse them, and they can never be edited or deleted.
     match /bouquets/{id} {
-      // Anyone with the link can open that one bouquet…
       allow get: if true;
-      // …but nobody can list or browse bouquets.
       allow list: if false;
-
-      // New bouquets must be well-formed. They can never be edited or deleted.
       allow create: if id.matches('^[A-Za-z0-9]{10}$')
         && request.resource.data.keys().hasOnly(['composition', 'message', 'recipient_name', 'sender_name', 'created_at'])
         && request.resource.data.keys().hasAll(['composition', 'message', 'created_at'])
@@ -27,7 +22,35 @@ service cloud.firestore {
         && (!('recipient_name' in request.resource.data) || (request.resource.data.recipient_name is string && request.resource.data.recipient_name.size() <= 60))
         && (!('sender_name' in request.resource.data) || (request.resource.data.sender_name is string && request.resource.data.sender_name.size() <= 60))
         && request.resource.data.created_at is timestamp;
+      allow update, delete: if false;
 
+      // Photos the recipient sends back. Only reachable by people who have the
+      // bouquet's link (its id is part of the path).
+      match /photos/{photoId} {
+        allow get: if true;
+        allow list: if request.query.limit <= 24;
+        allow create: if photoId.matches('^[A-Za-z0-9]{12}$')
+          && exists(/databases/$(database)/documents/bouquets/$(id))
+          && request.resource.data.keys().hasOnly(['image', 'created_at'])
+          && request.resource.data.image is string
+          && request.resource.data.image.size() > 1000
+          && request.resource.data.image.size() <= 900000
+          && request.resource.data.created_at is timestamp;
+        allow update, delete: if false;
+      }
+    }
+
+    // The public gallery: only photos people chose to share. No names and no
+    // link back to the bouquet are stored.
+    match /gallery/{photoId} {
+      allow get: if true;
+      allow list: if request.query.limit <= 48;
+      allow create: if photoId.matches('^[A-Za-z0-9]{12}$')
+        && request.resource.data.keys().hasOnly(['image', 'created_at'])
+        && request.resource.data.image is string
+        && request.resource.data.image.size() > 1000
+        && request.resource.data.image.size() <= 900000
+        && request.resource.data.created_at is timestamp;
       allow update, delete: if false;
     }
   }
